@@ -10,9 +10,6 @@ COPY package*.json ./
 # 의존성 설치
 RUN npm ci --only=production
 
-# Prisma 클라이언트 생성
-RUN npx prisma generate
-
 # 소스 코드 복사
 COPY . .
 
