@@ -88,3 +88,5 @@ prisma/migrations/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+/src/generated/prisma
