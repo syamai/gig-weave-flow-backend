@@ -290,19 +290,13 @@ const login = asyncHandler(async (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
 const getMe = asyncHandler(async (req, res) => {
-  const user = await prisma.profile.findUnique({
-    where: { id: req.user.id },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      phone: true,
-      avatarUrl: true,
-      createdAt: true
-    }
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', req.user.id)
+    .single();
 
-  if (!user) {
+  if (error || !user) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -396,12 +390,13 @@ const changePassword = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 현재 사용자 정보 가져오기
-  const user = await prisma.profile.findUnique({
-    where: { id: userId },
-    select: { password: true }
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('password_hash')
+    .eq('id', userId)
+    .single();
 
-  if (!user || !user.password) {
+  if (error || !user || !user.password_hash) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -409,7 +404,7 @@ const changePassword = asyncHandler(async (req, res) => {
   }
 
   // 현재 비밀번호 확인
-  const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+  const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password_hash);
   if (!isCurrentPasswordValid) {
     return res.status(400).json({
       success: false,
@@ -421,10 +416,17 @@ const changePassword = asyncHandler(async (req, res) => {
   const hashedNewPassword = await bcrypt.hash(newPassword, 12);
 
   // 비밀번호 업데이트
-  await prisma.profile.update({
-    where: { id: userId },
-    data: { password: hashedNewPassword }
-  });
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ password_hash: hashedNewPassword })
+    .eq('id', userId);
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update password'
+    });
+  }
 
   res.json({
     success: true,
@@ -468,19 +470,13 @@ const changePassword = asyncHandler(async (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
 const getSession = asyncHandler(async (req, res) => {
-  const user = await prisma.profile.findUnique({
-    where: { id: req.user.id },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      phone: true,
-      avatarUrl: true,
-      createdAt: true
-    }
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, full_name, created_at')
+    .eq('id', req.user.id)
+    .single();
 
-  if (!user) {
+  if (error || !user) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -498,7 +494,12 @@ const getSession = asyncHandler(async (req, res) => {
     success: true,
     data: {
       session: {
-        user,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.full_name,
+          createdAt: user.created_at
+        },
         access_token: token
       }
     }
@@ -543,19 +544,13 @@ const getSession = asyncHandler(async (req, res) => {
  *               $ref: '#/components/schemas/Error'
  */
 const onAuthStateChange = asyncHandler(async (req, res) => {
-  const user = await prisma.profile.findUnique({
-    where: { id: req.user.id },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      phone: true,
-      avatarUrl: true,
-      createdAt: true
-    }
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, full_name, created_at')
+    .eq('id', req.user.id)
+    .single();
 
-  if (!user) {
+  if (error || !user) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -574,7 +569,12 @@ const onAuthStateChange = asyncHandler(async (req, res) => {
     data: {
       event: 'SIGNED_IN',
       session: {
-        user,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.full_name,
+          createdAt: user.created_at
+        },
         access_token: token
       }
     }

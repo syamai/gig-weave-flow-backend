@@ -139,12 +139,14 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
 const getPartnerPerformance = asyncHandler(async (req, res) => {
   const { partnerId, startDate, endDate } = req.body;
 
-  const partnerProfile = await prisma.partnerProfile.findFirst({
-    where: { userId: partnerId },
-    select: { id: true }
-  });
+  const { data: partnerProfile, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', partnerId)
+    .eq('user_type', 'PARTNER')
+    .single();
 
-  if (!partnerProfile) {
+  if (error || !partnerProfile) {
     return res.status(404).json({
       success: false,
       message: 'Partner profile not found'

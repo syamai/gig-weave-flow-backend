@@ -210,33 +210,46 @@ const createProject = asyncHandler(async (req, res) => {
 
   const clientId = req.user.id;
 
-  const project = await prisma.$transaction(async (tx) => {
-    // 프로젝트 생성
-    const newProject = await tx.project.create({
-      data: {
-        clientId,
-        title,
-        description,
-        projectType,
-        budgetMin: budgetMin ? parseFloat(budgetMin) : null,
-        budgetMax: budgetMax ? parseFloat(budgetMax) : null,
-        durationWeeks: durationWeeks ? parseInt(durationWeeks) : null,
-        status: 'open'
-      }
+  // 프로젝트 생성
+  const { data: newProject, error: projectError } = await supabase
+    .from('projects')
+    .insert({
+      client_id: clientId,
+      title,
+      description,
+      project_type: projectType,
+      budget_min: budgetMin ? parseFloat(budgetMin) : null,
+      budget_max: budgetMax ? parseFloat(budgetMax) : null,
+      duration_weeks: durationWeeks ? parseInt(durationWeeks) : null,
+      status: 'open'
+    })
+    .select()
+    .single();
+
+  if (projectError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create project'
     });
+  }
 
-    // 기술 스택 연결
-    if (techStackIds.length > 0) {
-      await tx.projectTechStack.createMany({
-        data: techStackIds.map(techStackId => ({
-          projectId: newProject.id,
-          techStackId
-        }))
-      });
+  // 기술 스택 연결
+  if (techStackIds.length > 0) {
+    const techStackData = techStackIds.map(techStackId => ({
+      project_id: newProject.id,
+      tech_stack_id: techStackId
+    }));
+
+    const { error: techStackError } = await supabase
+      .from('project_tech_stacks')
+      .insert(techStackData);
+
+    if (techStackError) {
+      console.error('Failed to link tech stacks:', techStackError);
     }
+  }
 
-    return newProject;
-  });
+  const project = newProject;
 
   res.status(201).json({
     success: true,

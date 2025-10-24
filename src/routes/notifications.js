@@ -22,15 +22,30 @@ const getNotifications = asyncHandler(async (req, res) => {
     where.read = read === 'true';
   }
 
-  const [notifications, total] = await Promise.all([
-    prisma.notification.findMany({
-      where,
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' }
-    }),
-    prisma.notification.count({ where })
-  ]);
+  let query = supabase
+    .from('notifications')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
+  if (read !== undefined) {
+    query = query.eq('read', read === 'true');
+  }
+
+  const { data: notifications, error: notificationsError } = await query;
+
+  const { count: total, error: countError } = await supabase
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (notificationsError || countError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch notifications'
+    });
+  }
 
   res.json({
     success: true,
@@ -51,24 +66,33 @@ const markAsRead = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
-  const notification = await prisma.notification.findFirst({
-    where: {
-      id,
-      userId
-    }
-  });
+  const { data: notification, error: findError } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .single();
 
-  if (!notification) {
+  if (findError || !notification) {
     return res.status(404).json({
       success: false,
       message: 'Notification not found'
     });
   }
 
-  const updatedNotification = await prisma.notification.update({
-    where: { id },
-    data: { read: true }
-  });
+  const { data: updatedNotification, error: updateError } = await supabase
+    .from('notifications')
+    .update({ read: true })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update notification'
+    });
+  }
 
   res.json({
     success: true,
@@ -81,13 +105,18 @@ const markAsRead = asyncHandler(async (req, res) => {
 const markAllAsRead = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  await prisma.notification.updateMany({
-    where: {
-      userId,
-      read: false
-    },
-    data: { read: true }
-  });
+  const { error } = await supabase
+    .from('notifications')
+    .update({ read: true })
+    .eq('user_id', userId)
+    .eq('read', false);
+
+  if (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to mark notifications as read'
+    });
+  }
 
   res.json({
     success: true,
@@ -99,12 +128,18 @@ const markAllAsRead = asyncHandler(async (req, res) => {
 const getUnreadCount = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  const unreadCount = await prisma.notification.count({
-    where: {
-      userId,
-      read: false
-    }
-  });
+  const { count: unreadCount, error } = await supabase
+    .from('notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('read', false);
+
+  if (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get unread count'
+    });
+  }
 
   res.json({
     success: true,
@@ -117,23 +152,31 @@ const deleteNotification = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
-  const notification = await prisma.notification.findFirst({
-    where: {
-      id,
-      userId
-    }
-  });
+  const { data: notification, error: findError } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', userId)
+    .single();
 
-  if (!notification) {
+  if (findError || !notification) {
     return res.status(404).json({
       success: false,
       message: 'Notification not found'
     });
   }
 
-  await prisma.notification.delete({
-    where: { id }
-  });
+  const { error: deleteError } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', id);
+
+  if (deleteError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete notification'
+    });
+  }
 
   res.json({
     success: true,
@@ -145,9 +188,17 @@ const deleteNotification = asyncHandler(async (req, res) => {
 const deleteAllNotifications = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  await prisma.notification.deleteMany({
-    where: { userId }
-  });
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('user_id', userId);
+
+  if (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete all notifications'
+    });
+  }
 
   res.json({
     success: true,

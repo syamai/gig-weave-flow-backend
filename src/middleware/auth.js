@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const config = require('../config');
 
 // JWT 토큰 검증 미들웨어
@@ -18,14 +18,13 @@ const authenticateToken = async (req, res, next) => {
     const decoded = jwt.verify(token, config.jwtSecret);
     
     // 사용자 정보 조회
-    const user = await prisma.profile.findUnique({
-      where: { id: decoded.userId },
-      include: {
-        userRole: true
-      }
-    });
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', decoded.userId)
+      .single();
 
-    if (!user) {
+    if (error || !user) {
       return res.status(401).json({ 
         success: false, 
         message: 'User not found' 
@@ -35,8 +34,8 @@ const authenticateToken = async (req, res, next) => {
     req.user = {
       id: user.id,
       email: user.email,
-      fullName: user.fullName,
-      role: user.userRole?.role || 'client'
+      fullName: user.full_name,
+      role: user.role
     };
 
     next();
@@ -94,19 +93,18 @@ const optionalAuth = async (req, res, next) => {
 
     if (token) {
       const decoded = jwt.verify(token, config.jwtSecret);
-      const user = await prisma.profile.findUnique({
-        where: { id: decoded.userId },
-        include: {
-          userRole: true
-        }
-      });
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', decoded.userId)
+        .single();
 
-      if (user) {
+      if (user && !error) {
         req.user = {
           id: user.id,
           email: user.email,
-          fullName: user.fullName,
-          role: user.userRole?.role || 'client'
+          fullName: user.full_name,
+          role: user.role
         };
       }
     }

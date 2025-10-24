@@ -224,7 +224,7 @@ router.get('/:id', optionalAuth, getProject);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', authenticateToken, requireRole('client'), validate(projectValidation.create), createProject);
+router.post('/', authenticateToken, requireRole('CLIENT'), validate(projectValidation.create), createProject);
 
 /**
  * @swagger
@@ -316,7 +316,7 @@ router.post('/', authenticateToken, requireRole('client'), validate(projectValid
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', authenticateToken, requireRole('client'), validate(projectValidation.update), updateProject);
+router.put('/:id', authenticateToken, requireRole('CLIENT'), validate(projectValidation.update), updateProject);
 
 /**
  * @swagger
@@ -360,7 +360,7 @@ router.put('/:id', authenticateToken, requireRole('client'), validate(projectVal
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete('/:id', authenticateToken, requireRole('client'), deleteProject);
+router.delete('/:id', authenticateToken, requireRole('CLIENT'), deleteProject);
 
 /**
  * @swagger
@@ -430,6 +430,6 @@ router.delete('/:id', authenticateToken, requireRole('client'), deleteProject);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/my/projects', authenticateToken, requireRole('client'), getMyProjects);
+router.get('/my/projects', authenticateToken, requireRole('CLIENT'), getMyProjects);
 
 module.exports = router;

@@ -184,35 +184,13 @@ const getCategories = asyncHandler(async (req, res) => {
 const getTechStack = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const techStack = await prisma.techStack.findUnique({
-    where: { id },
-    include: {
-      partnerTechStacks: {
-        include: {
-          partnerProfile: {
-            include: {
-              profile: true
-            }
-          }
-        }
-      },
-      projectTechStacks: {
-        include: {
-          project: {
-            include: {
-              projectTechStacks: {
-                include: {
-                  techStack: true
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  });
+  const { data: techStack, error } = await supabase
+    .from('tech_stacks')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-  if (!techStack) {
+  if (error || !techStack) {
     return res.status(404).json({
       success: false,
       message: 'Tech stack not found'
@@ -230,9 +208,11 @@ const createTechStack = asyncHandler(async (req, res) => {
   const { name, category } = req.body;
 
   // 중복 확인
-  const existingTechStack = await prisma.techStack.findUnique({
-    where: { name }
-  });
+  const { data: existingTechStack } = await supabase
+    .from('tech_stacks')
+    .select('id')
+    .eq('name', name)
+    .single();
 
   if (existingTechStack) {
     return res.status(400).json({
@@ -241,12 +221,21 @@ const createTechStack = asyncHandler(async (req, res) => {
     });
   }
 
-  const techStack = await prisma.techStack.create({
-    data: {
+  const { data: techStack, error } = await supabase
+    .from('tech_stacks')
+    .insert({
       name,
       category
-    }
-  });
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create tech stack'
+    });
+  }
 
   res.status(201).json({
     success: true,
@@ -260,11 +249,13 @@ const updateTechStack = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { name, category } = req.body;
 
-  const existingTechStack = await prisma.techStack.findUnique({
-    where: { id }
-  });
+  const { data: existingTechStack, error: findError } = await supabase
+    .from('tech_stacks')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-  if (!existingTechStack) {
+  if (findError || !existingTechStack) {
     return res.status(404).json({
       success: false,
       message: 'Tech stack not found'
@@ -273,9 +264,11 @@ const updateTechStack = asyncHandler(async (req, res) => {
 
   // 이름 중복 확인 (자신 제외)
   if (name !== existingTechStack.name) {
-    const duplicateTechStack = await prisma.techStack.findUnique({
-      where: { name }
-    });
+    const { data: duplicateTechStack } = await supabase
+      .from('tech_stacks')
+      .select('id')
+      .eq('name', name)
+      .single();
 
     if (duplicateTechStack) {
       return res.status(400).json({
@@ -285,10 +278,19 @@ const updateTechStack = asyncHandler(async (req, res) => {
     }
   }
 
-  const techStack = await prisma.techStack.update({
-    where: { id },
-    data: { name, category }
-  });
+  const { data: techStack, error: updateError } = await supabase
+    .from('tech_stacks')
+    .update({ name, category })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update tech stack'
+    });
+  }
 
   res.json({
     success: true,
@@ -301,32 +303,50 @@ const updateTechStack = asyncHandler(async (req, res) => {
 const deleteTechStack = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const existingTechStack = await prisma.techStack.findUnique({
-    where: { id },
-    include: {
-      partnerTechStacks: true,
-      projectTechStacks: true
-    }
-  });
+  const { data: existingTechStack, error: findError } = await supabase
+    .from('tech_stacks')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-  if (!existingTechStack) {
+  if (findError || !existingTechStack) {
     return res.status(404).json({
       success: false,
       message: 'Tech stack not found'
     });
   }
 
-  // 사용 중인지 확인
-  if (existingTechStack.partnerTechStacks.length > 0 || existingTechStack.projectTechStacks.length > 0) {
+  // 사용 중인지 확인 (관련 테이블에서 참조 확인)
+  const { data: partnerTechStacks } = await supabase
+    .from('portfolio_tech_stacks')
+    .select('id')
+    .eq('tech_stack_id', id)
+    .limit(1);
+
+  const { data: projectTechStacks } = await supabase
+    .from('project_tech_stacks')
+    .select('id')
+    .eq('tech_stack_id', id)
+    .limit(1);
+
+  if ((partnerTechStacks && partnerTechStacks.length > 0) || (projectTechStacks && projectTechStacks.length > 0)) {
     return res.status(400).json({
       success: false,
       message: 'Cannot delete tech stack that is being used'
     });
   }
 
-  await prisma.techStack.delete({
-    where: { id }
-  });
+  const { error: deleteError } = await supabase
+    .from('tech_stacks')
+    .delete()
+    .eq('id', id);
+
+  if (deleteError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete tech stack'
+    });
+  }
 
   res.json({
     success: true,

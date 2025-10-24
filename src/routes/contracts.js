@@ -20,19 +20,20 @@ const createContract = asyncHandler(async (req, res) => {
   const clientId = req.user.id;
 
   // 프로젝트 소유자 확인
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { clientId: true, status: true }
-  });
+  const { data: project, error: projectError } = await supabase
+    .from('projects')
+    .select('client_id, status')
+    .eq('id', projectId)
+    .single();
 
-  if (!project) {
+  if (projectError || !project) {
     return res.status(404).json({
       success: false,
       message: 'Project not found'
     });
   }
 
-  if (project.clientId !== clientId) {
+  if (project.client_id !== clientId) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to create contract for this project'
@@ -48,12 +49,13 @@ const createContract = asyncHandler(async (req, res) => {
 
   // 제안서 확인 (선택사항)
   if (proposalId) {
-    const proposal = await prisma.proposal.findUnique({
-      where: { id: proposalId },
-      select: { partnerId: true, status: true }
-    });
+    const { data: proposal, error: proposalError } = await supabase
+      .from('proposals')
+      .select('partner_id, status')
+      .eq('id', proposalId)
+      .single();
 
-    if (!proposal) {
+    if (proposalError || !proposal) {
       return res.status(404).json({
         success: false,
         message: 'Proposal not found'
@@ -67,7 +69,7 @@ const createContract = asyncHandler(async (req, res) => {
       });
     }
 
-    if (proposal.partnerId !== partnerId) {
+    if (proposal.partner_id !== partnerId) {
       return res.status(400).json({
         success: false,
         message: 'Partner ID does not match proposal'
@@ -75,41 +77,54 @@ const createContract = asyncHandler(async (req, res) => {
     }
   }
 
-  const contract = await prisma.$transaction(async (tx) => {
-    // 계약 생성
-    const newContract = await tx.contract.create({
-      data: {
-        projectId,
-        partnerId,
-        proposalId,
-        agreedRate: parseFloat(agreedRate),
-        startDate: startDate ? new Date(startDate) : new Date(),
-        endDate: endDate ? new Date(endDate) : null,
-        terms,
-        status: 'active'
-      }
-    });
+  // 계약 생성
+  const { data: newContract, error: contractError } = await supabase
+    .from('contracts')
+    .insert({
+      project_id: projectId,
+      partner_id: partnerId,
+      proposal_id: proposalId,
+      agreed_rate: parseFloat(agreedRate),
+      start_date: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
+      end_date: endDate ? new Date(endDate).toISOString() : null,
+      terms,
+      status: 'active'
+    })
+    .select()
+    .single();
 
-    // 프로젝트 상태 업데이트
-    await tx.project.update({
-      where: { id: projectId },
-      data: { status: 'in_progress' }
+  if (contractError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create contract'
     });
+  }
 
-    // 다른 제안서들 거부
-    if (proposalId) {
-      await tx.proposal.updateMany({
-        where: {
-          projectId,
-          id: { not: proposalId },
-          status: 'pending'
-        },
-        data: { status: 'rejected' }
-      });
+  // 프로젝트 상태 업데이트
+  const { error: projectUpdateError } = await supabase
+    .from('projects')
+    .update({ status: 'in_progress' })
+    .eq('id', projectId);
+
+  if (projectUpdateError) {
+    console.error('Failed to update project status:', projectUpdateError);
+  }
+
+  // 다른 제안서들 거부
+  if (proposalId) {
+    const { error: proposalUpdateError } = await supabase
+      .from('proposals')
+      .update({ status: 'rejected' })
+      .eq('project_id', projectId)
+      .neq('id', proposalId)
+      .eq('status', 'pending');
+
+    if (proposalUpdateError) {
+      console.error('Failed to update other proposals:', proposalUpdateError);
     }
+  }
 
-    return newContract;
-  });
+  const contract = newContract;
 
   res.status(201).json({
     success: true,
@@ -143,31 +158,34 @@ const getContracts = asyncHandler(async (req, res) => {
     where.status = status;
   }
 
-  const [contracts, total] = await Promise.all([
-    prisma.contract.findMany({
-      where,
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        project: {
-          include: {
-            projectTechStacks: {
-              include: {
-                techStack: true
-              }
-            }
-          }
-        },
-        partnerProfile: {
-          include: {
-            profile: true
-          }
-        }
-      }
-    }),
-    prisma.contract.count({ where })
-  ]);
+  let query = supabase
+    .from('contracts')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
+  if (userRole === 'client') {
+    query = query.eq('client_id', userId);
+  } else if (userRole === 'partner') {
+    query = query.eq('partner_id', userId);
+  }
+
+  if (status) {
+    query = query.eq('status', status);
+  }
+
+  const { data: contracts, error: contractsError } = await query;
+
+  const { count: total, error: countError } = await supabase
+    .from('contracts')
+    .select('*', { count: 'exact', head: true });
+
+  if (contractsError || countError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch contracts'
+    });
+  }
 
   res.json({
     success: true,

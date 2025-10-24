@@ -118,31 +118,30 @@ const getMessages = asyncHandler(async (req, res) => {
     where.projectId = projectId;
   }
 
-  const [messages, total] = await Promise.all([
-    prisma.message.findMany({
-      where,
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true
-          }
-        },
-        receiver: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true
-          }
-        }
-      }
-    }),
-    prisma.message.count({ where })
-  ]);
+  let query = supabase
+    .from('messages')
+    .select('*')
+    .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`)
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
+  if (projectId) {
+    query = query.eq('project_id', projectId);
+  }
+
+  const { data: messages, error: messagesError } = await query;
+
+  const { count: total, error: countError } = await supabase
+    .from('messages')
+    .select('*', { count: 'exact', head: true })
+    .or(`sender_id.eq.${currentUserId},receiver_id.eq.${currentUserId}`);
+
+  if (messagesError || countError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch messages'
+    });
+  }
 
   res.json({
     success: true,
@@ -163,24 +162,33 @@ const markAsRead = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
-  const message = await prisma.message.findFirst({
-    where: {
-      id,
-      receiverId: userId
-    }
-  });
+  const { data: message, error: findError } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('id', id)
+    .eq('receiver_id', userId)
+    .single();
 
-  if (!message) {
+  if (findError || !message) {
     return res.status(404).json({
       success: false,
       message: 'Message not found'
     });
   }
 
-  const updatedMessage = await prisma.message.update({
-    where: { id },
-    data: { read: true }
-  });
+  const { data: updatedMessage, error: updateError } = await supabase
+    .from('messages')
+    .update({ read: true })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update message'
+    });
+  }
 
   res.json({
     success: true,
@@ -194,31 +202,18 @@ const getConversations = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 최근 메시지가 있는 대화 상대들 조회
-  const conversations = await prisma.message.findMany({
-    where: {
-      OR: [
-        { senderId: userId },
-        { receiverId: userId }
-      ]
-    },
-    include: {
-      sender: {
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true
-        }
-      },
-      receiver: {
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true
-        }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
+  const { data: conversations, error } = await supabase
+    .from('messages')
+    .select('*')
+    .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch conversations'
+    });
+  }
 
   // 대화 상대별로 그룹화하고 최근 메시지만 유지
   const conversationMap = new Map();
@@ -261,12 +256,18 @@ const getConversations = asyncHandler(async (req, res) => {
 const getUnreadCount = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  const unreadCount = await prisma.message.count({
-    where: {
-      receiverId: userId,
-      read: false
-    }
-  });
+  const { count: unreadCount, error } = await supabase
+    .from('messages')
+    .select('*', { count: 'exact', head: true })
+    .eq('receiver_id', userId)
+    .eq('read', false);
+
+  if (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get unread count'
+    });
+  }
 
   res.json({
     success: true,
