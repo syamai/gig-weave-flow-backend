@@ -6,8 +6,8 @@
 
 - **Runtime**: Node.js 18+
 - **Framework**: Express.js
-- **Database**: PostgreSQL (Railway)
-- **ORM**: Prisma
+- **Database**: PostgreSQL (Supabase)
+- **Database Client**: Supabase Client
 - **Authentication**: JWT
 - **Real-time**: Socket.io
 - **File Upload**: Multer
@@ -26,10 +26,8 @@ backend/
 │   ├── utils/           # 유틸리티 함수
 │   ├── config/          # 설정 파일
 │   └── app.js           # Express 앱 설정
-├── prisma/
-│   ├── schema.prisma    # Prisma 스키마
-│   └── migrations/      # 마이그레이션 파일
 ├── uploads/             # 파일 업로드 디렉토리
+├── essential-tables.sql # Supabase 테이블 스키마
 ├── package.json
 ├── server.js            # 서버 진입점
 └── railway.json         # Railway 배포 설정
@@ -53,6 +51,11 @@ cp env.example .env
 # Database
 DATABASE_URL="postgresql://username:password@localhost:5432/gig_weave_flow"
 
+# Supabase
+SUPABASE_URL="https://your-project.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+SUPABASE_ANON_KEY="your-anon-key"
+
 # JWT
 JWT_SECRET="your-super-secret-jwt-key-here"
 JWT_EXPIRES_IN="7d"
@@ -67,14 +70,8 @@ FRONTEND_URL="http://localhost:8080"
 
 ### 3. 데이터베이스 설정
 ```bash
-# Prisma 클라이언트 생성
-npm run prisma:generate
-
-# 마이그레이션 실행
-npm run prisma:migrate
-
-# Prisma Studio 실행 (선택사항)
-npm run prisma:studio
+# Supabase에서 essential-tables.sql 실행
+# Supabase 대시보드의 SQL Editor에서 실행하세요
 ```
 
 ### 4. 서버 실행
@@ -90,7 +87,7 @@ npm start
 
 ### Swagger UI
 - **개발 환경**: http://localhost:3001/api-docs
-- **프로덕션 환경**: https://your-railway-app.railway.app/api-docs
+- **프로덕션 환경**: https://gig-weave-flow-backend-production.up.railway.app/api-docs
 
 ### 상세 API 문서
 모든 API 엔드포인트의 상세한 문서는 [API_DOCS.md](./API_DOCS.md)를 참조하세요.
@@ -202,19 +199,14 @@ npm start
 
 ## 🔧 개발 도구
 
-### Prisma Studio
-```bash
-npm run prisma:studio
-```
-데이터베이스를 시각적으로 탐색하고 편집할 수 있습니다.
+### Supabase 대시보드
+Supabase 대시보드에서 데이터베이스를 시각적으로 탐색하고 편집할 수 있습니다.
+- **URL**: https://supabase.com/dashboard
 
-### 데이터베이스 마이그레이션
+### 데이터베이스 스키마
 ```bash
-# 개발 환경에서 마이그레이션 생성 및 적용
-npm run prisma:migrate
-
-# 프로덕션 환경에서 마이그레이션 적용
-npm run prisma:deploy
+# essential-tables.sql 파일을 Supabase SQL Editor에서 실행
+# 이 파일에는 모든 테이블, 인덱스, RLS 정책이 포함되어 있습니다
 ```
 
 ## 🚀 Railway 배포
@@ -230,7 +222,10 @@ npm run prisma:deploy
 ### 3. 환경 변수 설정
 Railway 대시보드에서 다음 환경 변수들을 설정하세요:
 
-- `DATABASE_URL` - Railway PostgreSQL URL
+- `DATABASE_URL` - Railway PostgreSQL URL (선택사항)
+- `SUPABASE_URL` - Supabase 프로젝트 URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase 서비스 역할 키
+- `SUPABASE_ANON_KEY` - Supabase 익명 키
 - `JWT_SECRET` - JWT 비밀키
 - `FRONTEND_URL` - 프론트엔드 URL
 - `NODE_ENV` - production
@@ -246,6 +241,7 @@ GitHub에 푸시하면 자동으로 배포됩니다.
 - Rate limiting
 - Helmet 보안 헤더
 - 입력 검증 (Joi)
+- Supabase RLS (Row Level Security)
 
 ## 📝 라이선스
 
