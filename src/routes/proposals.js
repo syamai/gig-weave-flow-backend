@@ -19,7 +19,7 @@ const createProposal = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 파트너 프로필 확인
-  const partnerProfile = await prisma.partnerProfile.findUnique({
+  const partnerProfile = await // prisma.partnerProfile.findUnique({
     where: { userId }
   });
 
@@ -31,7 +31,7 @@ const createProposal = asyncHandler(async (req, res) => {
   }
 
   // 프로젝트 존재 확인
-  const project = await prisma.project.findUnique({
+  const project = await // prisma.project.findUnique({
     where: { id: projectId }
   });
 
@@ -50,7 +50,7 @@ const createProposal = asyncHandler(async (req, res) => {
   }
 
   // 중복 제안서 확인
-  const existingProposal = await prisma.proposal.findUnique({
+  const existingProposal = await // prisma.proposal.findUnique({
     where: {
       projectId_partnerId: {
         projectId,
@@ -66,7 +66,7 @@ const createProposal = asyncHandler(async (req, res) => {
     });
   }
 
-  const proposal = await prisma.proposal.create({
+  const proposal = await // prisma.proposal.create({
     data: {
       projectId,
       partnerId: partnerProfile.id,
@@ -104,7 +104,7 @@ const getMyProposals = asyncHandler(async (req, res) => {
   const take = parseInt(limit);
   const userId = req.user.id;
 
-  const partnerProfile = await prisma.partnerProfile.findUnique({
+  const partnerProfile = await // prisma.partnerProfile.findUnique({
     where: { userId }
   });
 
@@ -121,7 +121,7 @@ const getMyProposals = asyncHandler(async (req, res) => {
   }
 
   const [proposals, total] = await Promise.all([
-    prisma.proposal.findMany({
+    // prisma.proposal.findMany({
       where,
       skip,
       take,
@@ -138,7 +138,7 @@ const getMyProposals = asyncHandler(async (req, res) => {
         }
       }
     }),
-    prisma.proposal.count({ where })
+    // prisma.proposal.count({ where })
   ]);
 
   res.json({
@@ -168,7 +168,7 @@ const getProjectProposals = asyncHandler(async (req, res) => {
   const take = parseInt(limit);
 
   // 프로젝트 소유자 확인
-  const project = await prisma.project.findUnique({
+  const project = await // prisma.project.findUnique({
     where: { id: projectId },
     select: { clientId: true }
   });
@@ -193,7 +193,7 @@ const getProjectProposals = asyncHandler(async (req, res) => {
   }
 
   const [proposals, total] = await Promise.all([
-    prisma.proposal.findMany({
+    // prisma.proposal.findMany({
       where,
       skip,
       take,
@@ -215,7 +215,7 @@ const getProjectProposals = asyncHandler(async (req, res) => {
         }
       }
     }),
-    prisma.proposal.count({ where })
+    // prisma.proposal.count({ where })
   ]);
 
   res.json({
@@ -236,7 +236,7 @@ const getProjectProposals = asyncHandler(async (req, res) => {
 const getProposal = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const proposal = await prisma.proposal.findUnique({
+  const proposal = await // prisma.proposal.findUnique({
     where: { id },
     include: {
       project: {
@@ -291,7 +291,7 @@ const updateProposalStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const proposal = await prisma.proposal.findUnique({
+  const proposal = await // prisma.proposal.findUnique({
     where: { id },
     include: {
       project: true
@@ -313,7 +313,7 @@ const updateProposalStatus = asyncHandler(async (req, res) => {
     });
   }
 
-  const updatedProposal = await prisma.proposal.update({
+  const updatedProposal = await // prisma.proposal.update({
     where: { id },
     data: { status },
     include: {
@@ -339,7 +339,7 @@ const updateProposal = asyncHandler(async (req, res) => {
   const updateData = req.body;
   const userId = req.user.id;
 
-  const proposal = await prisma.proposal.findFirst({
+  const proposal = await // prisma.proposal.findFirst({
     where: {
       id,
       partnerProfile: { userId }
@@ -360,7 +360,7 @@ const updateProposal = asyncHandler(async (req, res) => {
     });
   }
 
-  const updatedProposal = await prisma.proposal.update({
+  const updatedProposal = await // prisma.proposal.update({
     where: { id },
     data: {
       ...updateData,
@@ -381,7 +381,7 @@ const deleteProposal = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
-  const proposal = await prisma.proposal.findFirst({
+  const proposal = await // prisma.proposal.findFirst({
     where: {
       id,
       partnerProfile: { userId }
@@ -402,7 +402,7 @@ const deleteProposal = asyncHandler(async (req, res) => {
     });
   }
 
-  await prisma.proposal.delete({
+  await // prisma.proposal.delete({
     where: { id }
   });
 

@@ -12,7 +12,7 @@ const sendMessage = asyncHandler(async (req, res) => {
   const senderId = req.user.id;
 
   // 수신자 존재 확인
-  const receiver = await prisma.profile.findUnique({
+  const receiver = await // prisma.profile.findUnique({
     where: { id: receiverId }
   });
 
@@ -25,7 +25,7 @@ const sendMessage = asyncHandler(async (req, res) => {
 
   // 프로젝트 확인 (선택사항)
   if (projectId) {
-    const project = await prisma.project.findUnique({
+    const project = await // prisma.project.findUnique({
       where: { id: projectId }
     });
 
@@ -37,7 +37,7 @@ const sendMessage = asyncHandler(async (req, res) => {
     }
   }
 
-  const message = await prisma.message.create({
+  const message = await // prisma.message.create({
     data: {
       senderId,
       receiverId,
@@ -234,7 +234,7 @@ const getConversations = asyncHandler(async (req, res) => {
 
   // 읽지 않은 메시지 수 계산
   for (const [otherUserId, conversation] of conversationMap) {
-    const unreadCount = await prisma.message.count({
+    const unreadCount = await // prisma.message.count({
       where: {
         senderId: otherUserId,
         receiverId: userId,

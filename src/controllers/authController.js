@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const config = require('../config');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -16,9 +16,11 @@ const register = asyncHandler(async (req, res) => {
   const { email, password, fullName, role } = req.body;
 
   // 이메일 중복 확인
-  const existingUser = await prisma.profile.findUnique({
-    where: { email }
-  });
+  const { data: existingUser, error: userError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .single();
 
   if (existingUser) {
     return res.status(400).json({
@@ -30,41 +32,27 @@ const register = asyncHandler(async (req, res) => {
   // 비밀번호 해싱
   const hashedPassword = await bcrypt.hash(password, 12);
 
-  // 트랜잭션으로 사용자 생성
-  const result = await prisma.$transaction(async (tx) => {
-    // 프로필 생성
-    const profile = await tx.profile.create({
-      data: {
-        email,
-        fullName,
-        // 비밀번호는 별도 테이블에 저장하거나 auth.users에 저장
-        // 여기서는 간단히 처리
-      }
+  // 사용자 생성
+  const { data: newUser, error: createError } = await supabase
+    .from('users')
+    .insert({
+      email,
+      full_name: fullName,
+      role: role.toUpperCase(),
+      password_hash: hashedPassword
+    })
+    .select()
+    .single();
+
+  if (createError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create user'
     });
-
-    // 사용자 역할 생성
-    const userRole = await tx.userRole.create({
-      data: {
-        userId: profile.id,
-        role
-      }
-    });
-
-    // 파트너인 경우 파트너 프로필 생성
-    if (role === 'partner') {
-      await tx.partnerProfile.create({
-        data: {
-          userId: profile.id,
-          available: true
-        }
-      });
-    }
-
-    return { profile, userRole };
-  });
+  }
 
   // JWT 토큰 생성
-  const token = generateToken(result.profile.id);
+  const token = generateToken(newUser.id);
 
   res.status(201).json({
     success: true,
@@ -86,23 +74,21 @@ const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   // 사용자 조회
-  const user = await prisma.profile.findUnique({
-    where: { email },
-    include: {
-      userRole: true
-    }
-  });
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', email)
+    .single();
 
-  if (!user) {
+  if (userError || !user) {
     return res.status(401).json({
       success: false,
       message: 'Invalid credentials'
     });
   }
 
-  // 비밀번호 확인 (실제 구현에서는 auth.users 테이블에서 확인)
-  // 여기서는 간단히 처리
-  const isPasswordValid = await bcrypt.compare(password, 'hashed_password_from_auth_users');
+  // 비밀번호 확인
+  const isPasswordValid = await bcrypt.compare(password, user.password_hash);
   
   if (!isPasswordValid) {
     return res.status(401).json({
@@ -131,23 +117,13 @@ const login = asyncHandler(async (req, res) => {
 
 // 현재 사용자 정보 조회
 const getMe = asyncHandler(async (req, res) => {
-  const user = await prisma.profile.findUnique({
-    where: { id: req.user.id },
-    include: {
-      userRole: true,
-      partnerProfile: {
-        include: {
-          partnerTechStacks: {
-            include: {
-              techStack: true
-            }
-          }
-        }
-      }
-    }
-  });
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', req.user.id)
+    .single();
 
-  if (!user) {
+  if (userError || !user) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -160,11 +136,10 @@ const getMe = asyncHandler(async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
-        fullName: user.fullName,
-        avatarUrl: user.avatarUrl,
+        fullName: user.full_name,
+        avatarUrl: user.avatar_url,
         phone: user.phone,
-        role: user.userRole?.role || 'client',
-        partnerProfile: user.partnerProfile
+        role: user.role
       }
     }
   });

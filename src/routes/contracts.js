@@ -207,33 +207,28 @@ const getContract = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const userRole = req.user.role;
 
-  const contract = await prisma.contract.findUnique({
-    where: { id },
-    include: {
-      project: {
-        include: {
-          projectTechStacks: {
-            include: {
-              techStack: true
-            }
-          }
-        }
-      },
-      partnerProfile: {
-        include: {
-          profile: true,
-          partnerTechStacks: {
-            include: {
-              techStack: true
-            }
-          }
-        }
-      },
-      proposal: true
-    }
-  });
+  const { data: contract, error: contractError } = await supabase
+    .from('contracts')
+    .select(`
+      *,
+      projects (
+        *,
+        project_tech_stacks (
+          tech_stacks (*)
+        )
+      ),
+      profiles (
+        *,
+        portfolio_tech_stacks (
+          tech_stacks (*)
+        )
+      ),
+      proposals (*)
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!contract) {
+  if (contractError || !contract) {
     return res.status(404).json({
       success: false,
       message: 'Contract not found'
@@ -241,8 +236,8 @@ const getContract = asyncHandler(async (req, res) => {
   }
 
   // 권한 확인
-  const isClient = contract.project.clientId === userId;
-  const isPartner = contract.partnerProfile.userId === userId;
+  const isClient = contract.projects.client_id === userId;
+  const isPartner = contract.profiles.user_id === userId;
 
   if (!isClient && !isPartner) {
     return res.status(403).json({
@@ -264,15 +259,17 @@ const updateContractStatus = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const userRole = req.user.role;
 
-  const contract = await prisma.contract.findUnique({
-    where: { id },
-    include: {
-      project: true,
-      partnerProfile: true
-    }
-  });
+  const { data: contract, error: contractError } = await supabase
+    .from('contracts')
+    .select(`
+      *,
+      projects (*),
+      profiles (*)
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!contract) {
+  if (contractError || !contract) {
     return res.status(404).json({
       success: false,
       message: 'Contract not found'
@@ -280,8 +277,8 @@ const updateContractStatus = asyncHandler(async (req, res) => {
   }
 
   // 권한 확인
-  const isClient = contract.project.clientId === userId;
-  const isPartner = contract.partnerProfile.userId === userId;
+  const isClient = contract.projects.client_id === userId;
+  const isPartner = contract.profiles.user_id === userId;
 
   if (!isClient && !isPartner) {
     return res.status(403).json({
@@ -290,23 +287,28 @@ const updateContractStatus = asyncHandler(async (req, res) => {
     });
   }
 
-  const updatedContract = await prisma.$transaction(async (tx) => {
-    // 계약 상태 업데이트
-    const updatedContract = await tx.contract.update({
-      where: { id },
-      data: { status }
+  // 계약 상태 업데이트
+  const { data: updatedContract, error: updateError } = await supabase
+    .from('contracts')
+    .update({ status })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update contract status'
     });
+  }
 
-    // 계약 완료 시 프로젝트 상태도 업데이트
-    if (status === 'completed') {
-      await tx.project.update({
-        where: { id: contract.projectId },
-        data: { status: 'completed' }
-      });
-    }
-
-    return updatedContract;
-  });
+  // 계약 완료 시 프로젝트 상태도 업데이트
+  if (status === 'completed') {
+    await supabase
+      .from('projects')
+      .update({ status: 'completed' })
+      .eq('id', contract.project_id);
+  }
 
   res.json({
     success: true,
@@ -321,15 +323,17 @@ const updateContract = asyncHandler(async (req, res) => {
   const updateData = req.body;
   const userId = req.user.id;
 
-  const contract = await prisma.contract.findUnique({
-    where: { id },
-    include: {
-      project: true,
-      partnerProfile: true
-    }
-  });
+  const { data: contract, error: contractError } = await supabase
+    .from('contracts')
+    .select(`
+      *,
+      projects (*),
+      profiles (*)
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!contract) {
+  if (contractError || !contract) {
     return res.status(404).json({
       success: false,
       message: 'Contract not found'
@@ -337,22 +341,33 @@ const updateContract = asyncHandler(async (req, res) => {
   }
 
   // 권한 확인 (클라이언트만 수정 가능)
-  if (contract.project.clientId !== userId) {
+  if (contract.projects.client_id !== userId) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to update this contract'
     });
   }
 
-  const updatedContract = await prisma.contract.update({
-    where: { id },
-    data: {
-      ...updateData,
-      agreedRate: updateData.agreedRate ? parseFloat(updateData.agreedRate) : undefined,
-      startDate: updateData.startDate ? new Date(updateData.startDate) : undefined,
-      endDate: updateData.endDate ? new Date(updateData.endDate) : undefined
-    }
-  });
+  const updateFields = {
+    ...updateData,
+    agreed_rate: updateData.agreedRate ? parseFloat(updateData.agreedRate) : undefined,
+    start_date: updateData.startDate ? new Date(updateData.startDate).toISOString() : undefined,
+    end_date: updateData.endDate ? new Date(updateData.endDate).toISOString() : undefined
+  };
+
+  const { data: updatedContract, error: updateError } = await supabase
+    .from('contracts')
+    .update(updateFields)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update contract'
+    });
+  }
 
   res.json({
     success: true,

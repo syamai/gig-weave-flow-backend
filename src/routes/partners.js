@@ -74,7 +74,7 @@ const getPartners = asyncHandler(async (req, res) => {
 const getPartner = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const partner = await prisma.partnerProfile.findUnique({
+  const partner = await // prisma.partnerProfile.findUnique({
     where: { id },
     include: {
       profile: true,
@@ -127,7 +127,7 @@ const upsertPartnerProfile = asyncHandler(async (req, res) => {
 
   const userId = req.user.id;
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await // prisma.$transaction(async (tx) => {
     // 파트너 프로필 생성 또는 업데이트
     const partnerProfile = await tx.partnerProfile.upsert({
       where: { userId },
@@ -180,7 +180,7 @@ const upsertPartnerProfile = asyncHandler(async (req, res) => {
 const getMyPartnerProfile = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  const partnerProfile = await prisma.partnerProfile.findUnique({
+  const partnerProfile = await // prisma.partnerProfile.findUnique({
     where: { userId },
     include: {
       profile: true,
@@ -221,7 +221,7 @@ const createPortfolio = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 파트너 프로필 확인
-  const partnerProfile = await prisma.partnerProfile.findUnique({
+  const partnerProfile = await // prisma.partnerProfile.findUnique({
     where: { userId }
   });
 
@@ -232,7 +232,7 @@ const createPortfolio = asyncHandler(async (req, res) => {
     });
   }
 
-  const portfolio = await prisma.portfolio.create({
+  const portfolio = await // prisma.portfolio.create({
     data: {
       partnerId: partnerProfile.id,
       title,
@@ -257,7 +257,7 @@ const updatePortfolio = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 포트폴리오 소유자 확인
-  const portfolio = await prisma.portfolio.findFirst({
+  const portfolio = await // prisma.portfolio.findFirst({
     where: {
       id,
       partnerProfile: { userId }
@@ -271,7 +271,7 @@ const updatePortfolio = asyncHandler(async (req, res) => {
     });
   }
 
-  const updatedPortfolio = await prisma.portfolio.update({
+  const updatedPortfolio = await // prisma.portfolio.update({
     where: { id },
     data: updateData
   });
@@ -289,7 +289,7 @@ const deletePortfolio = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 포트폴리오 소유자 확인
-  const portfolio = await prisma.portfolio.findFirst({
+  const portfolio = await // prisma.portfolio.findFirst({
     where: {
       id,
       partnerProfile: { userId }
@@ -303,7 +303,7 @@ const deletePortfolio = asyncHandler(async (req, res) => {
     });
   }
 
-  await prisma.portfolio.delete({
+  await // prisma.portfolio.delete({
     where: { id }
   });
 

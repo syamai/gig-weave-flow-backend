@@ -24,7 +24,6 @@
   "license": "MIT",
   "dependencies": {
     "@fastify/multipart": "^8.0.0",
-    "@prisma/client": "^6.18.0",
     "@supabase/mcp-utils": "^0.2.3",
     "@supabase/supabase-js": "^2.76.1",
     "bcryptjs": "^2.4.3",
@@ -42,7 +41,6 @@
     "multer": "^2.0.2",
     "nodemailer": "^6.9.0",
     "pg": "^8.16.3",
-    "prisma": "^6.18.0",
     "socket.io": "^4.7.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",

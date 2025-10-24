@@ -13,7 +13,7 @@ const { prisma } = require('../config/database');
 const createNotification = async (notificationData) => {
   const { userId, title, message, type, link } = notificationData;
 
-  const notification = await prisma.notification.create({
+  const notification = await // prisma.notification.create({
     data: {
       userId,
       title,
@@ -33,7 +33,7 @@ const createNotification = async (notificationData) => {
  * @param {Object} additionalData - 추가 데이터
  */
 const createProjectNotification = async (projectId, type, additionalData = {}) => {
-  const project = await prisma.project.findUnique({
+  const project = await // prisma.project.findUnique({
     where: { id: projectId },
     include: {
       projectTechStacks: {
@@ -53,7 +53,7 @@ const createProjectNotification = async (projectId, type, additionalData = {}) =
   switch (type) {
     case 'project_created':
       // 파트너들에게 새 프로젝트 알림
-      const partners = await prisma.partnerProfile.findMany({
+      const partners = await // prisma.partnerProfile.findMany({
         where: { available: true },
         include: { profile: true }
       });
@@ -72,7 +72,7 @@ const createProjectNotification = async (projectId, type, additionalData = {}) =
 
     case 'project_updated':
       // 제안서를 제출한 파트너들에게 알림
-      const proposals = await prisma.proposal.findMany({
+      const proposals = await // prisma.proposal.findMany({
         where: { projectId },
         include: { partnerProfile: true }
       });
@@ -91,7 +91,7 @@ const createProjectNotification = async (projectId, type, additionalData = {}) =
 
     case 'project_cancelled':
       // 제안서를 제출한 파트너들에게 알림
-      const cancelledProposals = await prisma.proposal.findMany({
+      const cancelledProposals = await // prisma.proposal.findMany({
         where: { projectId },
         include: { partnerProfile: true }
       });
@@ -119,7 +119,7 @@ const createProjectNotification = async (projectId, type, additionalData = {}) =
  * @param {Object} additionalData - 추가 데이터
  */
 const createProposalNotification = async (proposalId, type, additionalData = {}) => {
-  const proposal = await prisma.proposal.findUnique({
+  const proposal = await // prisma.proposal.findUnique({
     where: { id: proposalId },
     include: {
       project: true,
@@ -183,7 +183,7 @@ const createProposalNotification = async (proposalId, type, additionalData = {})
  * @param {Object} additionalData - 추가 데이터
  */
 const createContractNotification = async (contractId, type, additionalData = {}) => {
-  const contract = await prisma.contract.findUnique({
+  const contract = await // prisma.contract.findUnique({
     where: { id: contractId },
     include: {
       project: true,
@@ -265,7 +265,7 @@ const createContractNotification = async (contractId, type, additionalData = {})
  * @param {Object} additionalData - 추가 데이터
  */
 const createMessageNotification = async (messageId, type, additionalData = {}) => {
-  const message = await prisma.message.findUnique({
+  const message = await // prisma.message.findUnique({
     where: { id: messageId },
     include: {
       sender: {
@@ -296,7 +296,7 @@ const createMessageNotification = async (messageId, type, additionalData = {}) =
  * @param {Object} additionalData - 추가 데이터
  */
 const createReviewNotification = async (reviewId, type, additionalData = {}) => {
-  const review = await prisma.review.findUnique({
+  const review = await // prisma.review.findUnique({
     where: { id: reviewId },
     include: {
       reviewer: {
