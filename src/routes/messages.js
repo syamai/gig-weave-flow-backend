@@ -12,11 +12,13 @@ const sendMessage = asyncHandler(async (req, res) => {
   const senderId = req.user.id;
 
   // 수신자 존재 확인
-  const receiver = await // prisma.profile.findUnique({
-    where: { id: receiverId }
-  });
+  const { data: receiver, error: receiverError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', receiverId)
+    .single();
 
-  if (!receiver) {
+  if (receiverError || !receiver) {
     return res.status(404).json({
       success: false,
       message: 'Receiver not found'
@@ -25,11 +27,13 @@ const sendMessage = asyncHandler(async (req, res) => {
 
   // 프로젝트 확인 (선택사항)
   if (projectId) {
-    const project = await // prisma.project.findUnique({
-      where: { id: projectId }
-    });
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', projectId)
+      .single();
 
-    if (!project) {
+    if (projectError || !project) {
       return res.status(404).json({
         success: false,
         message: 'Project not found'
@@ -37,23 +41,30 @@ const sendMessage = asyncHandler(async (req, res) => {
     }
   }
 
-  const message = await // prisma.message.create({
-    data: {
-      senderId,
-      receiverId,
-      projectId,
+  const { data: message, error: messageError } = await supabase
+    .from('messages')
+    .insert({
+      sender_id: senderId,
+      receiver_id: receiverId,
+      project_id: projectId,
       content
-    },
-    include: {
-      sender: {
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true
-        }
-      }
-    }
-  });
+    })
+    .select(`
+      *,
+      sender:profiles!messages_sender_id_fkey (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .single();
+
+  if (messageError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to send message'
+    });
+  }
 
   // Socket.io로 실시간 메시지 전송
   const io = req.app.get('io');

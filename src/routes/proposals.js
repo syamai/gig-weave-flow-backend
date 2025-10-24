@@ -19,11 +19,14 @@ const createProposal = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
   // 파트너 프로필 확인
-  const partnerProfile = await // prisma.partnerProfile.findUnique({
-    where: { userId }
-  });
+  const { data: partnerProfile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('user_type', 'PARTNER')
+    .single();
 
-  if (!partnerProfile) {
+  if (profileError || !partnerProfile) {
     return res.status(404).json({
       success: false,
       message: 'Partner profile not found'
@@ -31,11 +34,13 @@ const createProposal = asyncHandler(async (req, res) => {
   }
 
   // 프로젝트 존재 확인
-  const project = await // prisma.project.findUnique({
-    where: { id: projectId }
-  });
+  const { data: project, error: projectError } = await supabase
+    .from('projects')
+    .select('id, status')
+    .eq('id', projectId)
+    .single();
 
-  if (!project) {
+  if (projectError || !project) {
     return res.status(404).json({
       success: false,
       message: 'Project not found'
@@ -50,14 +55,12 @@ const createProposal = asyncHandler(async (req, res) => {
   }
 
   // 중복 제안서 확인
-  const existingProposal = await // prisma.proposal.findUnique({
-    where: {
-      projectId_partnerId: {
-        projectId,
-        partnerId: partnerProfile.id
-      }
-    }
-  });
+  const { data: existingProposal, error: existingError } = await supabase
+    .from('proposals')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('partner_id', partnerProfile.id)
+    .single();
 
   if (existingProposal) {
     return res.status(400).json({
@@ -66,24 +69,32 @@ const createProposal = asyncHandler(async (req, res) => {
     });
   }
 
-  const proposal = await // prisma.proposal.create({
-    data: {
-      projectId,
-      partnerId: partnerProfile.id,
-      coverLetter,
-      proposedRate: parseFloat(proposedRate),
-      estimatedDurationWeeks: estimatedDurationWeeks ? parseInt(estimatedDurationWeeks) : null,
-      portfolioLinks
-    },
-    include: {
-      project: true,
-      partnerProfile: {
-        include: {
-          profile: true
-        }
-      }
-    }
-  });
+  const { data: proposal, error: proposalError } = await supabase
+    .from('proposals')
+    .insert({
+      project_id: projectId,
+      partner_id: partnerProfile.id,
+      cover_letter: coverLetter,
+      proposed_rate: parseFloat(proposedRate),
+      estimated_duration_weeks: estimatedDurationWeeks ? parseInt(estimatedDurationWeeks) : null,
+      portfolio_links: portfolioLinks
+    })
+    .select(`
+      *,
+      projects (*),
+      profiles (
+        *,
+        users (*)
+      )
+    `)
+    .single();
+
+  if (proposalError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to create proposal'
+    });
+  }
 
   res.status(201).json({
     success: true,
@@ -104,42 +115,52 @@ const getMyProposals = asyncHandler(async (req, res) => {
   const take = parseInt(limit);
   const userId = req.user.id;
 
-  const partnerProfile = await // prisma.partnerProfile.findUnique({
-    where: { userId }
-  });
+  const { data: partnerProfile, error: profileError } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('user_type', 'PARTNER')
+    .single();
 
-  if (!partnerProfile) {
+  if (profileError || !partnerProfile) {
     return res.status(404).json({
       success: false,
       message: 'Partner profile not found'
     });
   }
 
-  const where = { partnerId: partnerProfile.id };
+  let query = supabase
+    .from('proposals')
+    .select(`
+      *,
+      projects (
+        *,
+        project_tech_stacks (
+          tech_stacks (*)
+        )
+      )
+    `)
+    .eq('partner_id', partnerProfile.id)
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
   if (status) {
-    where.status = status;
+    query = query.eq('status', status);
   }
 
-  const [proposals, total] = await Promise.all([
-    // prisma.proposal.findMany({
-      where,
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        project: {
-          include: {
-            projectTechStacks: {
-              include: {
-                techStack: true
-              }
-            }
-          }
-        }
-      }
-    }),
-    // prisma.proposal.count({ where })
-  ]);
+  const { data: proposals, error: proposalsError } = await query;
+
+  const { count: total, error: countError } = await supabase
+    .from('proposals')
+    .select('*', { count: 'exact', head: true })
+    .eq('partner_id', partnerProfile.id);
+
+  if (proposalsError || countError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch proposals'
+    });
+  }
 
   res.json({
     success: true,
@@ -168,55 +189,62 @@ const getProjectProposals = asyncHandler(async (req, res) => {
   const take = parseInt(limit);
 
   // 프로젝트 소유자 확인
-  const project = await // prisma.project.findUnique({
-    where: { id: projectId },
-    select: { clientId: true }
-  });
+  const { data: project, error: projectError } = await supabase
+    .from('projects')
+    .select('client_id')
+    .eq('id', projectId)
+    .single();
 
-  if (!project) {
+  if (projectError || !project) {
     return res.status(404).json({
       success: false,
       message: 'Project not found'
     });
   }
 
-  if (project.clientId !== req.user.id) {
+  if (project.client_id !== req.user.id) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to view proposals for this project'
     });
   }
 
-  const where = { projectId };
+  let query = supabase
+    .from('proposals')
+    .select(`
+      *,
+      profiles (
+        *,
+        users (*),
+        portfolio_tech_stacks (
+          tech_stacks (*)
+        ),
+        portfolios (
+          *
+        )
+      )
+    `)
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
   if (status) {
-    where.status = status;
+    query = query.eq('status', status);
   }
 
-  const [proposals, total] = await Promise.all([
-    // prisma.proposal.findMany({
-      where,
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        partnerProfile: {
-          include: {
-            profile: true,
-            partnerTechStacks: {
-              include: {
-                techStack: true
-              }
-            },
-            portfolios: {
-              take: 3,
-              orderBy: { createdAt: 'desc' }
-            }
-          }
-        }
-      }
-    }),
-    // prisma.proposal.count({ where })
-  ]);
+  const { data: proposals, error: proposalsError } = await query;
+
+  const { count: total, error: countError } = await supabase
+    .from('proposals')
+    .select('*', { count: 'exact', head: true })
+    .eq('project_id', projectId);
+
+  if (proposalsError || countError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch proposals'
+    });
+  }
 
   res.json({
     success: true,
@@ -236,33 +264,29 @@ const getProjectProposals = asyncHandler(async (req, res) => {
 const getProposal = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const proposal = await // prisma.proposal.findUnique({
-    where: { id },
-    include: {
-      project: {
-        include: {
-          projectTechStacks: {
-            include: {
-              techStack: true
-            }
-          }
-        }
-      },
-      partnerProfile: {
-        include: {
-          profile: true,
-          partnerTechStacks: {
-            include: {
-              techStack: true
-            }
-          },
-          portfolios: true
-        }
-      }
-    }
-  });
+  const { data: proposal, error: proposalError } = await supabase
+    .from('proposals')
+    .select(`
+      *,
+      projects (
+        *,
+        project_tech_stacks (
+          tech_stacks (*)
+        )
+      ),
+      profiles (
+        *,
+        users (*),
+        portfolio_tech_stacks (
+          tech_stacks (*)
+        ),
+        portfolios (*)
+      )
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!proposal) {
+  if (proposalError || !proposal) {
     return res.status(404).json({
       success: false,
       message: 'Proposal not found'
@@ -270,8 +294,8 @@ const getProposal = asyncHandler(async (req, res) => {
   }
 
   // 권한 확인
-  const isOwner = proposal.partnerProfile.userId === req.user.id;
-  const isProjectOwner = proposal.project.clientId === req.user.id;
+  const isOwner = proposal.profiles.user_id === req.user.id;
+  const isProjectOwner = proposal.projects.client_id === req.user.id;
 
   if (!isOwner && !isProjectOwner) {
     return res.status(403).json({
@@ -291,14 +315,16 @@ const updateProposalStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const proposal = await // prisma.proposal.findUnique({
-    where: { id },
-    include: {
-      project: true
-    }
-  });
+  const { data: proposal, error: proposalError } = await supabase
+    .from('proposals')
+    .select(`
+      *,
+      projects (*)
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!proposal) {
+  if (proposalError || !proposal) {
     return res.status(404).json({
       success: false,
       message: 'Proposal not found'
@@ -306,25 +332,33 @@ const updateProposalStatus = asyncHandler(async (req, res) => {
   }
 
   // 프로젝트 소유자 확인
-  if (proposal.project.clientId !== req.user.id) {
+  if (proposal.projects.client_id !== req.user.id) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to update this proposal'
     });
   }
 
-  const updatedProposal = await // prisma.proposal.update({
-    where: { id },
-    data: { status },
-    include: {
-      project: true,
-      partnerProfile: {
-        include: {
-          profile: true
-        }
-      }
-    }
-  });
+  const { data: updatedProposal, error: updateError } = await supabase
+    .from('proposals')
+    .update({ status })
+    .eq('id', id)
+    .select(`
+      *,
+      projects (*),
+      profiles (
+        *,
+        users (*)
+      )
+    `)
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update proposal status'
+    });
+  }
 
   res.json({
     success: true,
@@ -339,14 +373,17 @@ const updateProposal = asyncHandler(async (req, res) => {
   const updateData = req.body;
   const userId = req.user.id;
 
-  const proposal = await // prisma.proposal.findFirst({
-    where: {
-      id,
-      partnerProfile: { userId }
-    }
-  });
+  const { data: proposal, error: proposalError } = await supabase
+    .from('proposals')
+    .select(`
+      *,
+      profiles (*)
+    `)
+    .eq('id', id)
+    .eq('profiles.user_id', userId)
+    .single();
 
-  if (!proposal) {
+  if (proposalError || !proposal) {
     return res.status(404).json({
       success: false,
       message: 'Proposal not found'
@@ -360,14 +397,25 @@ const updateProposal = asyncHandler(async (req, res) => {
     });
   }
 
-  const updatedProposal = await // prisma.proposal.update({
-    where: { id },
-    data: {
-      ...updateData,
-      proposedRate: updateData.proposedRate ? parseFloat(updateData.proposedRate) : undefined,
-      estimatedDurationWeeks: updateData.estimatedDurationWeeks ? parseInt(updateData.estimatedDurationWeeks) : undefined
-    }
-  });
+  const updateFields = {
+    ...updateData,
+    proposed_rate: updateData.proposedRate ? parseFloat(updateData.proposedRate) : undefined,
+    estimated_duration_weeks: updateData.estimatedDurationWeeks ? parseInt(updateData.estimatedDurationWeeks) : undefined
+  };
+
+  const { data: updatedProposal, error: updateError } = await supabase
+    .from('proposals')
+    .update(updateFields)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update proposal'
+    });
+  }
 
   res.json({
     success: true,
@@ -381,14 +429,17 @@ const deleteProposal = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
-  const proposal = await // prisma.proposal.findFirst({
-    where: {
-      id,
-      partnerProfile: { userId }
-    }
-  });
+  const { data: proposal, error: proposalError } = await supabase
+    .from('proposals')
+    .select(`
+      *,
+      profiles (*)
+    `)
+    .eq('id', id)
+    .eq('profiles.user_id', userId)
+    .single();
 
-  if (!proposal) {
+  if (proposalError || !proposal) {
     return res.status(404).json({
       success: false,
       message: 'Proposal not found'
@@ -402,9 +453,17 @@ const deleteProposal = asyncHandler(async (req, res) => {
     });
   }
 
-  await // prisma.proposal.delete({
-    where: { id }
-  });
+  const { error: deleteError } = await supabase
+    .from('proposals')
+    .delete()
+    .eq('id', id);
+
+  if (deleteError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete proposal'
+    });
+  }
 
   res.json({
     success: true,
