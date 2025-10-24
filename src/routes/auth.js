@@ -70,7 +70,7 @@ const register = asyncHandler(async (req, res) => {
   const { email, password, fullName, role } = req.body;
 
   // 이메일 중복 확인
-  const existingUser = await prisma.profile.findUnique({
+  const existingUser = await prisma.user.findUnique({
     where: { email }
   });
 
@@ -85,25 +85,19 @@ const register = asyncHandler(async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 12);
 
   // 사용자 생성
-  const user = await prisma.profile.create({
+  const user = await prisma.user.create({
     data: {
       email,
       fullName,
-      password: hashedPassword
+      passwordHash: hashedPassword,
+      role: role.toUpperCase()
     },
     select: {
       id: true,
       email: true,
       fullName: true,
+      role: true,
       createdAt: true
-    }
-  });
-
-  // 사용자 역할 생성
-  await prisma.userRole.create({
-    data: {
-      userId: user.id,
-      role
     }
   });
 
@@ -182,18 +176,19 @@ const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   // 사용자 찾기
-  const user = await prisma.profile.findUnique({
+  const user = await prisma.user.findUnique({
     where: { email },
     select: {
       id: true,
       email: true,
       fullName: true,
-      password: true,
+      passwordHash: true,
+      role: true,
       createdAt: true
     }
   });
 
-  if (!user || !user.password) {
+  if (!user || !user.passwordHash) {
     return res.status(401).json({
       success: false,
       message: 'Invalid credentials'
@@ -201,7 +196,7 @@ const login = asyncHandler(async (req, res) => {
   }
 
   // 비밀번호 확인
-  const isPasswordValid = await bcrypt.compare(password, user.password);
+  const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
   if (!isPasswordValid) {
     return res.status(401).json({
       success: false,
