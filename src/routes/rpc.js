@@ -3,8 +3,7 @@ const { supabase } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-// 임시로 Prisma 사용 비활성화
-const prisma = null;
+// Supabase 사용
 
 const router = express.Router();
 
@@ -73,15 +72,21 @@ const router = express.Router();
 const createNotification = asyncHandler(async (req, res) => {
   const { p_user_id, p_title, p_message, p_type, p_link } = req.body;
 
-  const notification = await prisma.notification.create({
-    data: {
-      userId: p_user_id,
+  const { data: notification, error } = await supabase
+    .from('notifications')
+    .insert({
+      user_id: p_user_id,
       title: p_title,
       message: p_message,
       type: p_type,
       link: p_link || null
-    }
-  });
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    throw error;
+  }
 
   res.json({
     success: true,
@@ -133,12 +138,13 @@ const createNotification = asyncHandler(async (req, res) => {
 const getUserRole = asyncHandler(async (req, res) => {
   const { _user_id } = req.body;
 
-  const userRole = await prisma.userRole.findFirst({
-    where: { userId: _user_id },
-    select: { role: true }
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', _user_id)
+    .single();
 
-  if (!userRole) {
+  if (error || !user) {
     return res.status(404).json({
       success: false,
       message: 'User role not found'
@@ -147,7 +153,7 @@ const getUserRole = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: userRole.role
+    data: user.role
   });
 });
 
@@ -194,16 +200,16 @@ const getUserRole = asyncHandler(async (req, res) => {
 const hasRole = asyncHandler(async (req, res) => {
   const { _user_id, _role } = req.body;
 
-  const userRole = await prisma.userRole.findFirst({
-    where: { 
-      userId: _user_id,
-      role: _role
-    }
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', _user_id)
+    .eq('role', _role.toUpperCase())
+    .single();
 
   res.json({
     success: true,
-    data: !!userRole
+    data: !!user
   });
 });
 

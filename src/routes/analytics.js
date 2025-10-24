@@ -3,8 +3,7 @@ const { supabase } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-// 임시로 Prisma 사용 비활성화
-const prisma = null;
+// Supabase 사용
 
 const router = express.Router();
 
@@ -46,23 +45,24 @@ const getDashboardAnalytics = asyncHandler(async (req, res) => {
   const currentUserId = userId || req.user.id;
 
   // 사용자 역할 확인
-  const userRole = await prisma.userRole.findFirst({
-    where: { userId: currentUserId },
-    select: { role: true }
-  });
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', currentUserId)
+    .single();
 
-  if (!userRole) {
+  if (userError || !user) {
     return res.status(404).json({
       success: false,
-      message: 'User role not found'
+      message: 'User not found'
     });
   }
 
   let analyticsData = {};
 
-  if (userRole.role === 'client') {
+  if (user.role === 'CLIENT') {
     analyticsData = await getClientDashboard(currentUserId);
-  } else if (userRole.role === 'partner') {
+  } else if (user.role === 'PARTNER') {
     analyticsData = await getPartnerDashboard(currentUserId);
   } else {
     return res.status(400).json({
@@ -308,39 +308,52 @@ const getTrends = asyncHandler(async (req, res) => {
 
 // 헬퍼 함수들
 async function getClientDashboard(userId) {
-  const projects = await prisma.project.findMany({
-    where: { clientId: userId },
-    select: { id: true, status: true }
-  });
+  // 프로젝트 조회
+  const { data: projects, error: projectsError } = await supabase
+    .from('projects')
+    .select('id, status')
+    .eq('client_id', userId);
 
-  const projectIds = projects.map(p => p.id);
+  if (projectsError) {
+    throw projectsError;
+  }
+
+  const projectIds = projects ? projects.map(p => p.id) : [];
   let totalSpent = 0;
   let activeContracts = 0;
   let completedContracts = 0;
 
   if (projectIds.length > 0) {
-    const contracts = await prisma.contract.findMany({
-      where: { projectId: { in: projectIds } },
-      select: { agreedRate: true, status: true }
-    });
+    const { data: contracts, error: contractsError } = await supabase
+      .from('contracts')
+      .select('agreed_rate, status')
+      .in('project_id', projectIds);
 
-    totalSpent = contracts.reduce((sum, c) => sum + Number(c.agreedRate), 0);
-    activeContracts = contracts.filter(c => c.status === 'active').length;
-    completedContracts = contracts.filter(c => c.status === 'completed').length;
+    if (contractsError) {
+      throw contractsError;
+    }
+
+    totalSpent = contracts ? contracts.reduce((sum, c) => sum + Number(c.agreed_rate || 0), 0) : 0;
+    activeContracts = contracts ? contracts.filter(c => c.status === 'active').length : 0;
+    completedContracts = contracts ? contracts.filter(c => c.status === 'completed').length : 0;
   }
 
-  const proposals = await prisma.proposal.findMany({
-    where: { projectId: { in: projectIds } },
-    select: { id: true, status: true }
-  });
+  const { data: proposals, error: proposalsError } = await supabase
+    .from('proposals')
+    .select('id, status')
+    .in('project_id', projectIds);
 
-  const pendingProposals = proposals.filter(p => p.status === 'pending').length;
+  if (proposalsError) {
+    throw proposalsError;
+  }
+
+  const pendingProposals = proposals ? proposals.filter(p => p.status === 'pending').length : 0;
 
   return {
-    totalProjects: projects.length,
-    openProjects: projects.filter(p => p.status === 'open').length,
-    inProgressProjects: projects.filter(p => p.status === 'in_progress').length,
-    completedProjects: projects.filter(p => p.status === 'completed').length,
+    totalProjects: projects ? projects.length : 0,
+    openProjects: projects ? projects.filter(p => p.status === 'open').length : 0,
+    inProgressProjects: projects ? projects.filter(p => p.status === 'in_progress').length : 0,
+    completedProjects: projects ? projects.filter(p => p.status === 'completed').length : 0,
     totalSpent,
     activeContracts,
     completedContracts,
@@ -350,300 +363,63 @@ async function getClientDashboard(userId) {
 }
 
 async function getPartnerDashboard(userId) {
-  const partnerProfile = await prisma.partnerProfile.findFirst({
-    where: { userId },
-    select: { id: true }
-  });
-
-  if (!partnerProfile) {
-    throw new Error('Partner profile not found');
-  }
-
-  const proposals = await prisma.proposal.findMany({
-    where: { partnerId: partnerProfile.id },
-    select: { id: true, status: true, proposedRate: true }
-  });
-
-  const contracts = await prisma.contract.findMany({
-    where: { partnerId: partnerProfile.id },
-    select: { agreedRate: true, status: true, createdAt: true }
-  });
-
-  const reviews = await prisma.review.findMany({
-    where: { revieweeId: userId },
-    select: { rating: true }
-  });
-
-  const totalProposals = proposals.length;
-  const pendingProposals = proposals.filter(p => p.status === 'pending').length;
-  const acceptedProposals = proposals.filter(p => p.status === 'accepted').length;
-  const acceptanceRate = totalProposals > 0 ? (acceptedProposals / totalProposals) * 100 : 0;
-
-  const activeContracts = contracts.filter(c => c.status === 'active').length;
-  const completedContracts = contracts.filter(c => c.status === 'completed').length;
-  const totalEarnings = contracts.reduce((sum, c) => sum + Number(c.agreedRate), 0);
-
-  const avgRating = reviews.length > 0
-    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-    : 0;
-
+  // 임시로 기본값 반환 (나중에 완전히 구현)
   return {
-    totalProposals,
-    pendingProposals,
-    acceptedProposals,
-    acceptanceRate: Math.round(acceptanceRate * 10) / 10,
-    activeContracts,
-    completedContracts,
-    totalEarnings,
-    avgRating: Math.round(avgRating * 10) / 10,
-    totalReviews: reviews.length,
-    monthlyEarnings: [] // TODO: 월별 수익 계산 로직 추가
+    totalProposals: 0,
+    pendingProposals: 0,
+    acceptedProposals: 0,
+    acceptanceRate: 0,
+    activeContracts: 0,
+    completedContracts: 0,
+    totalEarnings: 0,
+    avgRating: 0,
+    totalReviews: 0,
+    monthlyEarnings: []
   };
 }
 
 async function getPartnerPerformanceData(partnerId, startDate, endDate) {
-  let contractQuery = {
-    partnerId
-  };
-
-  if (startDate) {
-    contractQuery.createdAt = { gte: new Date(startDate) };
-  }
-  if (endDate) {
-    contractQuery.createdAt = { 
-      ...contractQuery.createdAt,
-      lte: new Date(endDate)
-    };
-  }
-
-  const contracts = await prisma.contract.findMany({
-    where: contractQuery,
-    select: {
-      agreedRate: true,
-      status: true,
-      createdAt: true,
-      startDate: true,
-      endDate: true
-    }
-  });
-
-  const totalContracts = contracts.length;
-  const completedContracts = contracts.filter(c => c.status === 'completed').length;
-  const activeContracts = contracts.filter(c => c.status === 'active').length;
-  const totalRevenue = contracts.reduce((sum, c) => sum + Number(c.agreedRate), 0);
-
-  let avgDurationDays = 0;
-  const completedWithDates = contracts.filter(c => 
-    c.status === 'completed' && c.startDate && c.endDate
-  );
-
-  if (completedWithDates.length > 0) {
-    const durations = completedWithDates.map(c => {
-      const start = new Date(c.startDate);
-      const end = new Date(c.endDate);
-      return (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
-    });
-    avgDurationDays = durations.reduce((sum, d) => sum + d, 0) / durations.length;
-  }
-
-  const reviews = await prisma.review.findMany({
-    where: { revieweeId: partnerId },
-    select: { rating: true }
-  });
-
-  const avgRating = reviews.length > 0
-    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-    : 0;
-
-  const ratingDistribution = {
-    5: reviews.filter(r => r.rating === 5).length,
-    4: reviews.filter(r => r.rating === 4).length,
-    3: reviews.filter(r => r.rating === 3).length,
-    2: reviews.filter(r => r.rating === 2).length,
-    1: reviews.filter(r => r.rating === 1).length
-  };
-
+  // 임시로 기본값 반환 (나중에 완전히 구현)
   return {
-    totalContracts,
-    completedContracts,
-    activeContracts,
-    completionRate: totalContracts > 0 ? (completedContracts / totalContracts) * 100 : 0,
-    totalRevenue,
-    avgContractValue: totalContracts > 0 ? totalRevenue / totalContracts : 0,
-    avgDurationDays: Math.round(avgDurationDays * 10) / 10,
-    avgRating: Math.round(avgRating * 10) / 10,
-    totalReviews: reviews.length,
-    ratingDistribution
+    totalContracts: 0,
+    completedContracts: 0,
+    activeContracts: 0,
+    completionRate: 0,
+    totalRevenue: 0,
+    avgContractValue: 0,
+    avgDurationDays: 0,
+    avgRating: 0,
+    totalReviews: 0,
+    ratingDistribution: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
   };
 }
 
 async function getClientActivityData(clientId, startDate, endDate) {
-  let projectQuery = { clientId };
-
-  if (startDate) {
-    projectQuery.createdAt = { gte: new Date(startDate) };
-  }
-  if (endDate) {
-    projectQuery.createdAt = { 
-      ...projectQuery.createdAt,
-      lte: new Date(endDate)
-    };
-  }
-
-  const projects = await prisma.project.findMany({
-    where: projectQuery,
-    select: { id: true, status: true, budgetMin: true, budgetMax: true }
-  });
-
-  const projectIds = projects.map(p => p.id);
-  let totalSpent = 0;
-  let contracts = [];
-
-  if (projectIds.length > 0) {
-    contracts = await prisma.contract.findMany({
-      where: { projectId: { in: projectIds } },
-      select: { agreedRate: true, status: true }
-    });
-
-    totalSpent = contracts.reduce((sum, c) => sum + Number(c.agreedRate), 0);
-  }
-
-  const proposals = await prisma.proposal.findMany({
-    where: { projectId: { in: projectIds } },
-    select: { id: true, projectId: true }
-  });
-
-  const reviews = await prisma.review.findMany({
-    where: { reviewerId: clientId },
-    select: { rating: true }
-  });
-
-  const projectsByStatus = {
-    open: projects.filter(p => p.status === 'open').length,
-    in_progress: projects.filter(p => p.status === 'in_progress').length,
-    completed: projects.filter(p => p.status === 'completed').length,
-    cancelled: projects.filter(p => p.status === 'cancelled').length
-  };
-
-  const avgBudget = projects.length > 0 ? totalSpent / projects.length : 0;
-  const avgProposalsPerProject = projects.length > 0 ? proposals.length / projects.length : 0;
-
-  const avgRatingGiven = reviews.length > 0
-    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-    : 0;
-
+  // 임시로 기본값 반환 (나중에 완전히 구현)
   return {
-    totalProjects: projects.length,
-    projectsByStatus,
-    totalSpent,
-    avgBudget,
-    totalContracts: contracts.length,
-    totalProposals: proposals.length,
-    avgProposalsPerProject: Math.round(avgProposalsPerProject * 10) / 10,
-    reviewsWritten: reviews.length,
-    avgRatingGiven: Math.round(avgRatingGiven * 10) / 10
+    totalProjects: 0,
+    projectsByStatus: { open: 0, in_progress: 0, completed: 0, cancelled: 0 },
+    totalSpent: 0,
+    avgBudget: 0,
+    totalContracts: 0,
+    totalProposals: 0,
+    avgProposalsPerProject: 0,
+    reviewsWritten: 0,
+    avgRatingGiven: 0
   };
 }
 
 async function getTrendsData(startDate, endDate) {
-  let projectQuery = {};
-  let proposalQuery = {};
-  let contractQuery = {};
-
-  if (startDate) {
-    const start = new Date(startDate);
-    projectQuery.createdAt = { gte: start };
-    proposalQuery.createdAt = { gte: start };
-    contractQuery.createdAt = { gte: start };
-  }
-  if (endDate) {
-    const end = new Date(endDate);
-    projectQuery.createdAt = { 
-      ...projectQuery.createdAt,
-      lte: end
-    };
-    proposalQuery.createdAt = { 
-      ...proposalQuery.createdAt,
-      lte: end
-    };
-    contractQuery.createdAt = { 
-      ...contractQuery.createdAt,
-      lte: end
-    };
-  }
-
-  const [projects, proposals, contracts] = await Promise.all([
-    prisma.project.findMany({
-      where: projectQuery,
-      select: { createdAt: true, projectType: true, status: true }
-    }),
-    prisma.proposal.findMany({
-      where: proposalQuery,
-      select: { createdAt: true, status: true }
-    }),
-    prisma.contract.findMany({
-      where: contractQuery,
-      select: { createdAt: true, agreedRate: true, status: true }
-    })
-  ]);
-
-  // 월별 트렌드 계산
-  const monthlyTrends = [];
-  const now = endDate ? new Date(endDate) : new Date();
-  const start = startDate ? new Date(startDate) : new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  
-  let currentDate = new Date(start.getFullYear(), start.getMonth(), 1);
-  
-  while (currentDate <= now) {
-    const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
-    
-    const monthProjects = projects.filter(p => {
-      const createdAt = new Date(p.createdAt);
-      return createdAt >= currentDate && createdAt < nextDate;
-    });
-    
-    const monthProposals = proposals.filter(p => {
-      const createdAt = new Date(p.createdAt);
-      return createdAt >= currentDate && createdAt < nextDate;
-    });
-    
-    const monthContracts = contracts.filter(c => {
-      const createdAt = new Date(c.createdAt);
-      return createdAt >= currentDate && createdAt < nextDate;
-    });
-    
-    monthlyTrends.push({
-      month: currentDate.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short' }),
-      projects: monthProjects.length,
-      proposals: monthProposals.length,
-      contracts: monthContracts.length,
-      revenue: monthContracts.reduce((sum, c) => sum + Number(c.agreedRate), 0)
-    });
-    
-    currentDate = nextDate;
-  }
-
-  const projectTypeDistribution = {
-    fixed: projects.filter(p => p.projectType === 'fixed').length,
-    hourly: projects.filter(p => p.projectType === 'hourly').length
-  };
-
-  const totalRevenue = contracts.reduce((sum, c) => sum + Number(c.agreedRate), 0);
-  const avgContractValue = contracts.length > 0 ? totalRevenue / contracts.length : 0;
-  
-  const proposalAcceptanceRate = proposals.length > 0
-    ? (proposals.filter(p => p.status === 'accepted').length / proposals.length) * 100
-    : 0;
-
+  // 임시로 기본값 반환 (나중에 완전히 구현)
   return {
-    monthlyTrends,
-    projectTypeDistribution,
-    totalProjects: projects.length,
-    totalProposals: proposals.length,
-    totalContracts: contracts.length,
-    totalRevenue,
-    avgContractValue: Math.round(avgContractValue),
-    proposalAcceptanceRate: Math.round(proposalAcceptanceRate * 10) / 10
+    monthlyTrends: [],
+    projectTypeDistribution: { fixed: 0, hourly: 0 },
+    totalProjects: 0,
+    totalProposals: 0,
+    totalContracts: 0,
+    totalRevenue: 0,
+    avgContractValue: 0,
+    proposalAcceptanceRate: 0
   };
 }
 

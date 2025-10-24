@@ -4,8 +4,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { validate, reviewValidation } = require('../middleware/validation');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-// 임시로 Prisma 사용 비활성화
-const prisma = null;
+// Supabase 사용
 
 const router = express.Router();
 
@@ -84,15 +83,21 @@ const createReview = asyncHandler(async (req, res) => {
   const reviewerId = req.user.id;
 
   // 계약 존재 및 완료 상태 확인
-  const contract = await prisma.contract.findUnique({
-    where: { id: contractId },
-    include: {
-      project: true,
-      partnerProfile: true
-    }
-  });
+  const { data: contract, error: contractError } = await supabase
+    .from('contracts')
+    .select(`
+      *,
+      projects!contracts_project_id_fkey (
+        client_id
+      ),
+      profiles!contracts_freelancer_id_fkey (
+        user_id
+      )
+    `)
+    .eq('id', contractId)
+    .single();
 
-  if (!contract) {
+  if (contractError || !contract) {
     return res.status(404).json({
       success: false,
       message: 'Contract not found'
@@ -107,8 +112,8 @@ const createReview = asyncHandler(async (req, res) => {
   }
 
   // 계약 당사자인지 확인
-  const isClient = contract.project.clientId === reviewerId;
-  const isPartner = contract.partnerProfile.userId === reviewerId;
+  const isClient = contract.projects.client_id === reviewerId;
+  const isPartner = contract.profiles.user_id === reviewerId;
 
   if (!isClient && !isPartner) {
     return res.status(403).json({
@@ -118,7 +123,7 @@ const createReview = asyncHandler(async (req, res) => {
   }
 
   // 리뷰 대상자 확인
-  const expectedRevieweeId = isClient ? contract.partnerProfile.userId : contract.project.clientId;
+  const expectedRevieweeId = isClient ? contract.profiles.user_id : contract.projects.client_id;
   if (revieweeId !== expectedRevieweeId) {
     return res.status(400).json({
       success: false,
@@ -127,12 +132,12 @@ const createReview = asyncHandler(async (req, res) => {
   }
 
   // 중복 리뷰 확인
-  const existingReview = await prisma.review.findFirst({
-    where: {
-      contractId,
-      reviewerId
-    }
-  });
+  const { data: existingReview } = await supabase
+    .from('reviews')
+    .select('id')
+    .eq('contract_id', contractId)
+    .eq('reviewer_id', reviewerId)
+    .single();
 
   if (existingReview) {
     return res.status(400).json({
@@ -141,24 +146,29 @@ const createReview = asyncHandler(async (req, res) => {
     });
   }
 
-  const review = await prisma.review.create({
-    data: {
-      contractId,
-      reviewerId,
-      revieweeId,
+  // 리뷰 생성
+  const { data: review, error: reviewError } = await supabase
+    .from('reviews')
+    .insert({
+      contract_id: contractId,
+      reviewer_id: reviewerId,
+      reviewee_id: revieweeId,
       rating,
       comment
-    },
-    include: {
-      reviewer: {
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true
-        }
-      }
-    }
-  });
+    })
+    .select(`
+      *,
+      profiles!reviews_reviewer_id_fkey (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .single();
+
+  if (reviewError) {
+    throw reviewError;
+  }
 
   res.status(201).json({
     success: true,
@@ -242,36 +252,42 @@ const updateReview = asyncHandler(async (req, res) => {
   const { rating, comment } = req.body;
   const userId = req.user.id;
 
-  const review = await prisma.review.findFirst({
-    where: {
-      id,
-      reviewerId: userId
-    }
-  });
+  // 리뷰 존재 및 권한 확인
+  const { data: review, error: findError } = await supabase
+    .from('reviews')
+    .select('id')
+    .eq('id', id)
+    .eq('reviewer_id', userId)
+    .single();
 
-  if (!review) {
+  if (findError || !review) {
     return res.status(404).json({
       success: false,
       message: 'Review not found'
     });
   }
 
-  const updatedReview = await prisma.review.update({
-    where: { id },
-    data: {
+  // 리뷰 업데이트
+  const { data: updatedReview, error: updateError } = await supabase
+    .from('reviews')
+    .update({
       rating,
       comment
-    },
-    include: {
-      reviewer: {
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true
-        }
-      }
-    }
-  });
+    })
+    .eq('id', id)
+    .select(`
+      *,
+      profiles!reviews_reviewer_id_fkey (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .single();
+
+  if (updateError) {
+    throw updateError;
+  }
 
   res.json({
     success: true,
@@ -326,23 +342,30 @@ const deleteReview = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const userId = req.user.id;
 
-  const review = await prisma.review.findFirst({
-    where: {
-      id,
-      reviewerId: userId
-    }
-  });
+  // 리뷰 존재 및 권한 확인
+  const { data: review, error: findError } = await supabase
+    .from('reviews')
+    .select('id')
+    .eq('id', id)
+    .eq('reviewer_id', userId)
+    .single();
 
-  if (!review) {
+  if (findError || !review) {
     return res.status(404).json({
       success: false,
       message: 'Review not found'
     });
   }
 
-  await prisma.review.delete({
-    where: { id }
-  });
+  // 리뷰 삭제
+  const { error: deleteError } = await supabase
+    .from('reviews')
+    .delete()
+    .eq('id', id);
+
+  if (deleteError) {
+    throw deleteError;
+  }
 
   res.json({
     success: true,
@@ -418,52 +441,66 @@ const getUserReviews = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
   const take = parseInt(limit);
 
-  const [reviews, total, avgRating] = await Promise.all([
-    prisma.review.findMany({
-      where: { revieweeId: userId },
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        reviewer: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true
-          }
-        },
-        contract: {
-          include: {
-            project: {
-              select: {
-                title: true
-              }
-            }
-          }
-        }
-      }
-    }),
-    prisma.review.count({
-      where: { revieweeId: userId }
-    }),
-    prisma.review.aggregate({
-      where: { revieweeId: userId },
-      _avg: { rating: true }
-    })
-  ]);
+  // 리뷰 목록 조회
+  const { data: reviews, error: reviewsError } = await supabase
+    .from('reviews')
+    .select(`
+      *,
+      profiles!reviews_reviewer_id_fkey (
+        id,
+        full_name,
+        avatar_url
+      ),
+      contracts!reviews_contract_id_fkey (
+        projects!contracts_project_id_fkey (
+          title
+        )
+      )
+    `)
+    .eq('reviewee_id', userId)
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
+  if (reviewsError) {
+    throw reviewsError;
+  }
+
+  // 총 개수 조회
+  const { count: total, error: countError } = await supabase
+    .from('reviews')
+    .select('id', { count: 'exact' })
+    .eq('reviewee_id', userId);
+
+  if (countError) {
+    throw countError;
+  }
+
+  // 평균 평점 계산
+  const { data: ratingData, error: ratingError } = await supabase
+    .from('reviews')
+    .select('rating')
+    .eq('reviewee_id', userId);
+
+  if (ratingError) {
+    throw ratingError;
+  }
+
+  const averageRating = ratingData && ratingData.length > 0
+    ? ratingData.reduce((sum, r) => sum + r.rating, 0) / ratingData.length
+    : 0;
 
   res.json({
     success: true,
     data: {
-      reviews,
+      reviews: reviews || [],
       pagination: {
         page: parseInt(page),
         limit: take,
-        total,
-        pages: Math.ceil(total / take)
+        total: total || 0,
+        pages: Math.ceil((total || 0) / take)
       },
-      averageRating: avgRating._avg.rating || 0,
-      totalReviews: total
+      averageRating: Math.round(averageRating * 10) / 10,
+      totalReviews: total || 0
     }
   });
 });
@@ -509,34 +546,41 @@ const getUserReviews = asyncHandler(async (req, res) => {
 const getContractReviews = asyncHandler(async (req, res) => {
   const { contractId } = req.params;
 
-  const contract = await prisma.contract.findUnique({
-    where: { id: contractId }
-  });
+  // 계약 존재 확인
+  const { data: contract, error: contractError } = await supabase
+    .from('contracts')
+    .select('id')
+    .eq('id', contractId)
+    .single();
 
-  if (!contract) {
+  if (contractError || !contract) {
     return res.status(404).json({
       success: false,
       message: 'Contract not found'
     });
   }
 
-  const reviews = await prisma.review.findMany({
-    where: { contractId },
-    include: {
-      reviewer: {
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true
-        }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
+  // 계약 리뷰 조회
+  const { data: reviews, error: reviewsError } = await supabase
+    .from('reviews')
+    .select(`
+      *,
+      profiles!reviews_reviewer_id_fkey (
+        id,
+        full_name,
+        avatar_url
+      )
+    `)
+    .eq('contract_id', contractId)
+    .order('created_at', { ascending: false });
+
+  if (reviewsError) {
+    throw reviewsError;
+  }
 
   res.json({
     success: true,
-    data: { reviews }
+    data: { reviews: reviews || [] }
   });
 });
 
