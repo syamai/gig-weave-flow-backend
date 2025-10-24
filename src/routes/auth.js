@@ -8,6 +8,37 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 const router = express.Router();
 
+// 데이터베이스 연결 테스트 엔드포인트
+router.get('/test-db', asyncHandler(async (req, res) => {
+  try {
+    // users 테이블 구조 확인
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .limit(1);
+    
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Database connection failed',
+        error: error.message
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Database connected successfully',
+      data: data || []
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Database test failed',
+      error: err.message
+    });
+  }
+}));
+
 /**
  * @swagger
  * /api/auth/register:
