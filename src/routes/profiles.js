@@ -1,5 +1,5 @@
 const express = require('express');
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -64,14 +64,20 @@ const uploadAvatar = asyncHandler(async (req, res) => {
     });
   }
 
-  const profile = await prisma.profile.update({
-    where: { id: userId },
-    data: { avatarUrl }
-  });
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: avatarUrl })
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
 
   res.json({
     success: true,
-    data: { avatarUrl: profile.avatarUrl }
+    data: { avatarUrl: profile.avatar_url }
   });
 });
 
@@ -100,10 +106,14 @@ const uploadAvatar = asyncHandler(async (req, res) => {
 const deleteAvatar = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  await prisma.profile.update({
-    where: { id: userId },
-    data: { avatarUrl: null }
-  });
+  const { error } = await supabase
+    .from('profiles')
+    .update({ avatar_url: null })
+    .eq('user_id', userId);
+
+  if (error) {
+    throw error;
+  }
 
   res.json({
     success: true,
@@ -150,19 +160,22 @@ const deleteAvatar = asyncHandler(async (req, res) => {
 const getProfile = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const profile = await prisma.profile.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      fullName: true,
-      email: true,
-      phone: true,
-      avatarUrl: true,
-      createdAt: true
-    }
-  });
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select(`
+      id,
+      full_name,
+      phone,
+      avatar_url,
+      created_at,
+      users!profiles_user_id_fkey (
+        email
+      )
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!profile) {
+  if (error || !profile) {
     return res.status(404).json({
       success: false,
       message: 'Profile not found'
@@ -171,7 +184,16 @@ const getProfile = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    data: { profile }
+    data: { 
+      profile: {
+        id: profile.id,
+        fullName: profile.full_name,
+        email: profile.users.email,
+        phone: profile.phone,
+        avatarUrl: profile.avatar_url,
+        createdAt: profile.created_at
+      }
+    }
   });
 });
 
@@ -228,25 +250,41 @@ const updateProfile = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const { fullName, phone } = req.body;
 
-  const profile = await prisma.profile.update({
-    where: { id: userId },
-    data: {
-      fullName,
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .update({
+      full_name: fullName,
       phone
-    },
-    select: {
-      id: true,
-      fullName: true,
-      email: true,
-      phone: true,
-      avatarUrl: true,
-      createdAt: true
-    }
-  });
+    })
+    .eq('user_id', userId)
+    .select(`
+      id,
+      full_name,
+      phone,
+      avatar_url,
+      created_at,
+      users!profiles_user_id_fkey (
+        email
+      )
+    `)
+    .single();
+
+  if (error) {
+    throw error;
+  }
 
   res.json({
     success: true,
-    data: { profile }
+    data: { 
+      profile: {
+        id: profile.id,
+        fullName: profile.full_name,
+        email: profile.users.email,
+        phone: profile.phone,
+        avatarUrl: profile.avatar_url,
+        createdAt: profile.created_at
+      }
+    }
   });
 });
 

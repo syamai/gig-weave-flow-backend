@@ -1,5 +1,5 @@
 const express = require('express');
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 
@@ -50,24 +50,22 @@ const router = express.Router();
 const getProfile = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const user = await prisma.profile.findUnique({
-    where: { id },
-    include: {
-      userRole: true,
-      partnerProfile: {
-        include: {
-          partnerTechStacks: {
-            include: {
-              techStack: true
-            }
-          },
-          portfolios: true
-        }
-      }
-    }
-  });
+  const { data: user, error } = await supabase
+    .from('profiles')
+    .select(`
+      *,
+      users!profiles_user_id_fkey (
+        id,
+        email,
+        full_name,
+        role,
+        created_at
+      )
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!user) {
+  if (error || !user) {
     return res.status(404).json({
       success: false,
       message: 'User not found'
@@ -138,14 +136,20 @@ const updateProfile = asyncHandler(async (req, res) => {
   const { fullName, phone, avatarUrl } = req.body;
   const userId = req.user.id;
 
-  const user = await prisma.profile.update({
-    where: { id: userId },
-    data: {
-      fullName,
+  const { data: user, error } = await supabase
+    .from('profiles')
+    .update({
+      full_name: fullName,
       phone,
-      avatarUrl
-    }
-  });
+      avatar_url: avatarUrl
+    })
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) {
+    throw error;
+  }
 
   res.json({
     success: true,
@@ -212,51 +216,49 @@ const getUserStats = asyncHandler(async (req, res) => {
 
   if (userRole === 'client') {
     // 클라이언트 통계
-    const [totalProjects, inProgress, completed, totalSpent] = await Promise.all([
-      prisma.project.count({ where: { clientId: userId } }),
-      prisma.project.count({ where: { clientId: userId, status: 'in_progress' } }),
-      prisma.project.count({ where: { clientId: userId, status: 'completed' } }),
-      prisma.contract.aggregate({
-        where: {
-          project: { clientId: userId }
-        },
-        _sum: { agreedRate: true }
-      })
+    const [totalProjectsResult, inProgressResult, completedResult, totalSpentResult] = await Promise.all([
+      supabase.from('projects').select('id', { count: 'exact' }).eq('client_id', userId),
+      supabase.from('projects').select('id', { count: 'exact' }).eq('client_id', userId).eq('status', 'in_progress'),
+      supabase.from('projects').select('id', { count: 'exact' }).eq('client_id', userId).eq('status', 'completed'),
+      supabase.from('contracts').select('agreed_rate').eq('client_id', userId)
     ]);
 
+    const totalSpent = totalSpentResult.data?.reduce((sum, contract) => sum + (contract.agreed_rate || 0), 0) || 0;
+
     stats = {
-      totalProjects,
-      inProgress,
-      completed,
-      totalSpent: totalSpent._sum.agreedRate || 0,
+      totalProjects: totalProjectsResult.count || 0,
+      inProgress: inProgressResult.count || 0,
+      completed: completedResult.count || 0,
+      totalSpent,
       totalEarnings: 0,
       pendingProposals: 0
     };
   } else if (userRole === 'partner') {
     // 파트너 통계
-    const partnerProfile = await prisma.partnerProfile.findUnique({
-      where: { userId }
-    });
+    const { data: partnerProfile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
 
     if (partnerProfile) {
-      const [totalProposals, inProgress, completed, totalEarnings, pendingProposals] = await Promise.all([
-        prisma.proposal.count({ where: { partnerId: partnerProfile.id } }),
-        prisma.contract.count({ where: { partnerId: partnerProfile.id, status: 'active' } }),
-        prisma.contract.count({ where: { partnerId: partnerProfile.id, status: 'completed' } }),
-        prisma.contract.aggregate({
-          where: { partnerId: partnerProfile.id },
-          _sum: { agreedRate: true }
-        }),
-        prisma.proposal.count({ where: { partnerId: partnerProfile.id, status: 'pending' } })
+      const [totalProposalsResult, inProgressResult, completedResult, totalEarningsResult, pendingProposalsResult] = await Promise.all([
+        supabase.from('proposals').select('id', { count: 'exact' }).eq('freelancer_id', userId),
+        supabase.from('contracts').select('id', { count: 'exact' }).eq('freelancer_id', userId).eq('status', 'active'),
+        supabase.from('contracts').select('id', { count: 'exact' }).eq('freelancer_id', userId).eq('status', 'completed'),
+        supabase.from('contracts').select('agreed_rate').eq('freelancer_id', userId),
+        supabase.from('proposals').select('id', { count: 'exact' }).eq('freelancer_id', userId).eq('status', 'pending')
       ]);
 
+      const totalEarnings = totalEarningsResult.data?.reduce((sum, contract) => sum + (contract.agreed_rate || 0), 0) || 0;
+
       stats = {
-        totalProjects: totalProposals,
-        inProgress,
-        completed,
-        totalEarnings: totalEarnings._sum.agreedRate || 0,
+        totalProjects: totalProposalsResult.count || 0,
+        inProgress: inProgressResult.count || 0,
+        completed: completedResult.count || 0,
+        totalEarnings,
         totalSpent: 0,
-        pendingProposals
+        pendingProposals: pendingProposalsResult.count || 0
       };
     }
   }
