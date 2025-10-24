@@ -1,5 +1,5 @@
 const express = require('express');
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { validate, reviewValidation } = require('../middleware/validation');
 const { asyncHandler } = require('../middleware/errorHandler');
