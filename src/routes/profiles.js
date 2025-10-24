@@ -288,6 +288,20 @@ const updateProfile = asyncHandler(async (req, res) => {
   });
 });
 
+// 기본 라우트 (라우트 등록 확인용)
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Profiles API is working',
+    endpoints: [
+      'POST /avatar - Upload avatar (auth required)',
+      'DELETE /avatar - Delete avatar (auth required)',
+      'PUT / - Update profile (auth required)',
+      'GET /:id - Get profile by ID'
+    ]
+  });
+});
+
 // 보호된 라우트
 router.post('/avatar', authenticateToken, uploadAvatar);
 router.delete('/avatar', authenticateToken, deleteAvatar);
