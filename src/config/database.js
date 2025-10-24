@@ -1,11 +1,18 @@
 const { createClient } = require('@supabase/supabase-js');
 const config = require('./index');
 
+// 환경 변수 검증
+const supabaseUrl = process.env.SUPABASE_URL || 'https://xmeuypaqqtqcvkryygjo.supabase.co';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseKey) {
+  console.error('❌ SUPABASE_SERVICE_ROLE_KEY 또는 SUPABASE_ANON_KEY가 설정되지 않았습니다.');
+  console.error('💡 Railway 대시보드에서 환경 변수를 설정하세요.');
+  process.exit(1);
+}
+
 // Supabase 클라이언트 생성
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://xmeuypaqqtqcvkryygjo.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Database connection test
 const connectDB = async () => {
