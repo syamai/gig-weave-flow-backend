@@ -20,7 +20,7 @@ const options = {
     servers: [
       {
         url: config.nodeEnv === 'production' 
-          ? 'https://your-railway-app.railway.app' 
+          ? 'https://gig-weave-flow-backend-production.up.railway.app' 
           : `http://localhost:${config.port}`,
         description: config.nodeEnv === 'production' ? 'Production server' : 'Development server'
       }
