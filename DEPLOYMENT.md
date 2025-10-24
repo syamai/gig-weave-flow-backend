@@ -12,21 +12,20 @@
 
 ### 2. Supabase 데이터베이스 설정
 
-1. Supabase 대시보드에서 "Settings" → "Database" 이동
-2. "Connection string" 섹션에서 "URI" 복사
-3. 연결 문자열 형식:
-   ```
-   postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
-   ```
+1. Supabase 대시보드에서 "Settings" → "API" 이동
+2. 다음 정보를 복사:
+   - **Project URL**: `https://[YOUR-PROJECT-REF].supabase.co`
+   - **anon public key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+   - **service_role key**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
 
 ### 3. Supabase에서 데이터베이스 스키마 생성
 
-Supabase SQL Editor에서 다음 명령어 실행:
+Supabase SQL Editor에서 `essential-tables.sql` 파일의 내용을 실행:
 
-```sql
--- Prisma 마이그레이션 실행
--- (Railway 배포 후 자동으로 실행됨)
-```
+1. Supabase 대시보드에서 "SQL Editor" 이동
+2. "New query" 클릭
+3. `essential-tables.sql` 파일의 내용을 복사하여 실행
+4. 모든 테이블과 RLS 정책이 생성되는지 확인
 
 ## Railway 배포 방법
 
@@ -43,8 +42,10 @@ Railway 대시보드에서 다음 환경변수들을 설정하세요:
 
 #### 필수 환경변수
 ```bash
-# 데이터베이스 (Supabase PostgreSQL)
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+# Supabase 설정
+SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_ANON_KEY=your-anon-key
 
 # JWT 설정
 JWT_SECRET=your-super-secret-jwt-key-here-change-in-production
@@ -82,15 +83,13 @@ SMTP_PASS=your-app-password
 2. 배포 로그를 확인하여 성공적으로 배포되었는지 확인하세요
 3. 배포 완료 후 제공되는 URL로 API에 접근할 수 있습니다
 
-### 4. 데이터베이스 마이그레이션
+### 4. 데이터베이스 스키마 확인
 
-배포 후 Railway 터미널에서 다음 명령어를 실행하세요:
+배포 후 Supabase 대시보드에서 다음을 확인하세요:
 
-```bash
-npx prisma migrate deploy
-```
-
-또는 Supabase SQL Editor에서 직접 실행할 수도 있습니다.
+1. "Table Editor"에서 모든 테이블이 생성되었는지 확인
+2. RLS 정책이 적용되었는지 확인
+3. 초기 데이터(기술 스택 등)가 로드되었는지 확인
 
 ### 5. Supabase 설정 확인
 
@@ -117,11 +116,11 @@ https://your-railway-app.railway.app/api-docs
    ```bash
    curl -X POST https://your-railway-app.railway.app/api/auth/register \
      -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"password123","fullName":"Test User","role":"client"}'
+     -d '{"email":"test@example.com","password":"password123","fullName":"Test User","role":"CLIENT"}'
    ```
 
 2. **데이터베이스 연결 확인**:
-   - Supabase 대시보드에서 `profiles` 테이블 확인
+   - Supabase 대시보드에서 `users` 테이블 확인
    - 새로 생성된 사용자 데이터 확인
 
 ## 🔧 로컬에서 Railway CLI 사용
@@ -140,6 +139,8 @@ railway login
 railway init
 
 # 환경변수 설정
+railway variables set SUPABASE_URL=https://your-project.supabase.co
+railway variables set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 railway variables set JWT_SECRET=your-secret-key
 railway variables set NODE_ENV=production
 
@@ -155,6 +156,11 @@ railway up
 - 환경변수 관리
 - 도메인 설정
 
+### Supabase 대시보드
+- 데이터베이스 쿼리 성능 모니터링
+- 연결 수 및 응답 시간 확인
+- 실시간 로그 확인
+
 ### 헬스체크
 - 엔드포인트: `/api/health`
 - 상태: 200 OK
@@ -164,15 +170,15 @@ railway up
 
 ### 일반적인 문제들
 
-1. **데이터베이스 연결 실패**
-   - `DATABASE_URL` 환경변수 확인 (Supabase 연결 문자열)
+1. **Supabase 연결 실패**
+   - `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY` 환경변수 확인
    - Supabase 프로젝트 상태 확인
-   - 데이터베이스 비밀번호 확인
+   - API 키가 올바른지 확인
 
-2. **Supabase 연결 문제**
-   - Supabase 프로젝트가 활성화되어 있는지 확인
-   - 연결 문자열 형식 확인: `postgresql://postgres:[PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres`
-   - Supabase 대시보드에서 연결 상태 확인
+2. **데이터베이스 스키마 오류**
+   - `essential-tables.sql`이 실행되었는지 확인
+   - Supabase 대시보드에서 테이블 생성 상태 확인
+   - RLS 정책이 적용되었는지 확인
 
 3. **JWT 토큰 오류**
    - `JWT_SECRET` 환경변수 확인
@@ -185,11 +191,6 @@ railway up
 5. **파일 업로드 실패**
    - `UPLOAD_DIR` 권한 확인
    - `MAX_FILE_SIZE` 설정 확인
-
-6. **Prisma 마이그레이션 실패**
-   - Supabase 데이터베이스 권한 확인
-   - 마이그레이션 파일 상태 확인
-   - `npx prisma migrate reset` 후 재시도
 
 ### 로그 확인
 ```bash
@@ -217,7 +218,7 @@ GitHub 저장소와 연결하면 `main` 브랜치에 푸시할 때마다 자동�
 - 정적 파일 CDN 사용 고려
 
 ### Supabase 최적화
-- **연결 풀링**: Prisma가 자동으로 관리
+- **연결 풀링**: Supabase가 자동으로 관리
 - **인덱스**: 자주 조회되는 컬럼에 인덱스 설정
 - **쿼리 최적화**: Supabase 대시보드에서 쿼리 성능 모니터링
 - **백업**: Supabase 자동 백업 활용

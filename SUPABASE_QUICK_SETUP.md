@@ -22,24 +22,38 @@
 - **Database Password**: 위에서 설정한 비밀번호
 - **Project Reference**: URL에서 확인 가능
 
-### 4단계: 데이터베이스 연결 문자열 복사
-1. Supabase 대시보드에서 "Settings" → "Database" 이동
-2. "Connection string" 섹션에서 "URI" 복사
-3. 형식: `postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres`
+### 4단계: 데이터베이스 스키마 생성
+1. Supabase 대시보드에서 "SQL Editor" 이동
+2. "New query" 클릭
+3. `essential-tables.sql` 파일의 내용을 복사하여 실행
+4. 모든 테이블과 RLS 정책이 생성되는지 확인
 
-### 5단계: Railway에 환경변수 설정
+### 5단계: API 키 확인
+1. Supabase 대시보드에서 "Settings" → "API" 이동
+2. 다음 키들을 복사:
+   - **Project URL**: `https://[PROJECT-REF].supabase.co`
+   - **anon public**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+   - **service_role**: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+
+### 6단계: Railway에 환경변수 설정
 1. Railway 대시보드에서 프로젝트 선택
 2. "Variables" 탭 클릭
 3. 다음 환경변수 추가:
 
 ```bash
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+# Supabase 설정
+SUPABASE_URL=https://[PROJECT-REF].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_ANON_KEY=your-anon-key
+
+# JWT 설정
 JWT_SECRET=your-super-secret-jwt-key-here-change-in-production
 JWT_EXPIRES_IN=7d
+
+# 서버 설정
 NODE_ENV=production
 PORT=3001
 FRONTEND_URL=https://your-frontend-domain.com
-SOCKET_CORS_ORIGIN=https://your-frontend-domain.com
 ```
 
 ## 방법 2: Supabase CLI 사용 (고급)
@@ -62,7 +76,7 @@ supabase login
 
 ### 3단계: 프로젝트 초기화
 ```bash
-cd /Users/ahnsungbin/Source/gig-weave-flow/backend
+cd /Users/ahnsungbin/Source/gig-weave-flow-backend
 supabase init
 ```
 
@@ -73,6 +87,7 @@ supabase link --project-ref [YOUR-PROJECT-REF]
 
 ### 5단계: 데이터베이스 스키마 푸시
 ```bash
+# essential-tables.sql을 migrations 폴더에 복사 후
 supabase db push
 ```
 
@@ -81,12 +96,20 @@ supabase db push
 ### 1단계: Supabase SQL Editor 사용
 1. Supabase 대시보드에서 "SQL Editor" 이동
 2. "New query" 클릭
-3. 다음 SQL 실행:
+3. `essential-tables.sql` 파일의 내용을 복사하여 실행
 
-```sql
--- 기본 테이블 생성 (Prisma 마이그레이션 대신)
--- 이 방법은 권장하지 않습니다. Prisma 마이그레이션을 사용하세요.
-```
+### 2단계: 테이블 생성 확인
+1. "Table Editor"에서 다음 테이블들이 생성되었는지 확인:
+   - `users` - 사용자 정보
+   - `profiles` - 프로필 정보
+   - `projects` - 프로젝트
+   - `proposals` - 제안서
+   - `contracts` - 계약
+   - `messages` - 메시지
+   - `notifications` - 알림
+   - `tech_stacks` - 기술 스택
+   - `portfolios` - 포트폴리오
+   - `reviews` - 리뷰
 
 ## 🎯 권장 방법
 
@@ -108,26 +131,26 @@ curl https://your-railway-app.railway.app/api/health
 ```bash
 curl -X POST https://your-railway-app.railway.app/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123","fullName":"Test User","role":"client"}'
+  -d '{"email":"test@example.com","password":"password123","fullName":"Test User","role":"CLIENT"}'
 ```
 
 ### 3. Supabase 대시보드 확인
-1. "Table Editor"에서 `profiles` 테이블 확인
+1. "Table Editor"에서 `users` 테이블 확인
 2. 새로 생성된 사용자 데이터 확인
 
 ## 🚨 문제 해결
 
 ### 연결 실패
-- **확인**: `DATABASE_URL` 형식이 올바른지 확인
-- **해결**: Supabase 대시보드에서 연결 문자열 다시 복사
+- **확인**: `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`가 올바른지 확인
+- **해결**: Supabase 대시보드에서 API 키 다시 복사
 
-### 마이그레이션 실패
+### 스키마 생성 실패
 - **확인**: Supabase 프로젝트가 활성화되어 있는지 확인
-- **해결**: Railway 터미널에서 `npx prisma migrate deploy` 실행
+- **해결**: `essential-tables.sql`을 다시 실행
 
 ### 권한 오류
-- **확인**: 데이터베이스 비밀번호가 올바른지 확인
-- **해결**: Supabase에서 비밀번호 재설정
+- **확인**: `SUPABASE_SERVICE_ROLE_KEY`가 올바른지 확인
+- **해결**: Supabase에서 서비스 역할 키 다시 복사
 
 ## 📞 도움이 필요하시면
 

@@ -29,41 +29,35 @@
 
 ## 3. 데이터베이스 스키마 설정
 
-### 3.1 Prisma 마이그레이션 실행
-Railway 배포 후 다음 명령어 실행:
+### 3.1 essential-tables.sql 실행
+Supabase SQL Editor에서 `essential-tables.sql` 파일의 내용을 실행하세요:
 
-```bash
-# Railway 터미널에서 실행
-npx prisma migrate deploy
-```
+1. Supabase 대시보드에서 "SQL Editor" 이동
+2. "New query" 클릭
+3. `essential-tables.sql` 파일의 내용을 복사하여 실행
 
-### 3.2 수동으로 스키마 생성 (선택사항)
-Supabase SQL Editor에서 실행:
-
-```sql
--- 모든 테이블이 자동으로 생성됩니다
--- Prisma 마이그레이션이 실행되면 확인하세요
-```
+### 3.2 스키마 확인
+실행 후 다음 테이블들이 생성되었는지 확인:
+- `users` - 사용자 정보
+- `profiles` - 프로필 정보
+- `projects` - 프로젝트
+- `proposals` - 제안서
+- `contracts` - 계약
+- `messages` - 메시지
+- `notifications` - 알림
+- `tech_stacks` - 기술 스택
+- `portfolios` - 포트폴리오
+- `reviews` - 리뷰
 
 ## 4. Supabase 설정 확인
 
 ### 4.1 테이블 확인
 1. Supabase 대시보드에서 "Table Editor" 이동
-2. 다음 테이블들이 생성되었는지 확인:
-   - `profiles`
-   - `user_roles`
-   - `tech_stacks`
-   - `partner_profiles`
-   - `portfolios`
-   - `projects`
-   - `proposals`
-   - `contracts`
-   - `messages`
-   - `reviews`
-   - `notifications`
+2. 모든 테이블이 생성되었는지 확인
+3. RLS (Row Level Security) 정책이 적용되었는지 확인
 
 ### 4.2 RLS (Row Level Security) 설정
-Supabase는 기본적으로 RLS가 활성화되어 있습니다. 필요에 따라 설정을 조정하세요.
+Supabase는 기본적으로 RLS가 활성화되어 있습니다. `essential-tables.sql`에 포함된 정책들이 자동으로 적용됩니다.
 
 ## 5. 환경변수 설정
 
@@ -71,14 +65,38 @@ Supabase는 기본적으로 RLS가 활성화되어 있습니다. 필요에 따�
 Railway 대시보드에서 다음 환경변수 설정:
 
 ```bash
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+# Supabase 설정
+SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_ANON_KEY=your-anon-key
+
+# JWT 설정
+JWT_SECRET=your-super-secret-jwt-key-here
+JWT_EXPIRES_IN=7d
+
+# 서버 설정
+PORT=3001
+NODE_ENV=production
+FRONTEND_URL=https://your-frontend-domain.com
 ```
 
 ### 5.2 로컬 개발 환경변수
 `.env` 파일에 추가:
 
 ```bash
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+# Supabase 설정
+SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_ANON_KEY=your-anon-key
+
+# JWT 설정
+JWT_SECRET=your-super-secret-jwt-key-here
+JWT_EXPIRES_IN=7d
+
+# 서버 설정
+PORT=3001
+NODE_ENV=development
+FRONTEND_URL=http://localhost:8080
 ```
 
 ## 6. 연결 테스트
@@ -91,31 +109,27 @@ curl https://your-railway-app.railway.app/api/health
 # 사용자 등록 테스트
 curl -X POST https://your-railway-app.railway.app/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123","fullName":"Test User","role":"client"}'
+  -d '{"email":"test@example.com","password":"password123","fullName":"Test User","role":"CLIENT"}'
 ```
 
 ### 6.2 Supabase 대시보드 확인
-1. "Table Editor"에서 `profiles` 테이블 확인
+1. "Table Editor"에서 `users` 테이블 확인
 2. 새로 생성된 사용자 데이터 확인
 3. "Authentication" → "Users"에서 사용자 목록 확인
 
 ## 7. 문제 해결
 
 ### 7.1 연결 실패
-- **확인사항**: `DATABASE_URL` 형식이 올바른지 확인
-- **해결방법**: Supabase 대시보드에서 연결 문자열 다시 복사
+- **확인사항**: `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`가 올바른지 확인
+- **해결방법**: Supabase 대시보드에서 API 키 다시 복사
 
-### 7.2 마이그레이션 실패
+### 7.2 스키마 생성 실패
 - **확인사항**: Supabase 프로젝트가 활성화되어 있는지 확인
-- **해결방법**: 
-  ```bash
-  npx prisma migrate reset
-  npx prisma migrate deploy
-  ```
+- **해결방법**: `essential-tables.sql`을 다시 실행
 
 ### 7.3 권한 오류
-- **확인사항**: 데이터베이스 비밀번호가 올바른지 확인
-- **해결방법**: Supabase에서 비밀번호 재설정
+- **확인사항**: `SUPABASE_SERVICE_ROLE_KEY`가 올바른지 확인
+- **해결방법**: Supabase에서 서비스 역할 키 다시 복사
 
 ## 8. Supabase 추가 기능
 

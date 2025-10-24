@@ -7,88 +7,28 @@
 
 ## 해결 방법
 
-### 1. Supabase 대시보드에서 스키마 생성
+### 1. essential-tables.sql 파일 사용
+
+프로젝트 루트에 있는 `essential-tables.sql` 파일을 사용하여 스키마를 생성하세요.
+
+### 2. Supabase 대시보드에서 스키마 생성
 
 1. **Supabase 대시보드 접속**: https://supabase.com/dashboard
-2. **프로젝트 선택**: `xmeuypaqqtqcvkryygjo`
+2. **프로젝트 선택**: 해당 프로젝트 선택
 3. **SQL Editor 이동**: 왼쪽 메뉴에서 "SQL Editor" 클릭
 4. **새 쿼리 생성**: "New query" 버튼 클릭
-5. **스키마 실행**: 아래 SQL을 복사하여 실행
+5. **스키마 실행**: `essential-tables.sql` 파일의 내용을 복사하여 실행
 
-```sql
--- 사용자 테이블 생성
-CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  full_name VARCHAR(255),
-  avatar_url TEXT,
-  role VARCHAR(50) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'moderator')),
-  is_active BOOLEAN DEFAULT true,
-  email_verified BOOLEAN DEFAULT false,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+### 3. essential-tables.sql 파일 내용
 
--- 프로필 테이블 생성
-CREATE TABLE IF NOT EXISTS profiles (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  bio TEXT,
-  skills TEXT[],
-  hourly_rate DECIMAL(10,2),
-  availability VARCHAR(50) DEFAULT 'available',
-  location VARCHAR(255),
-  website_url TEXT,
-  linkedin_url TEXT,
-  github_url TEXT,
-  portfolio_url TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+이 파일에는 다음이 포함되어 있습니다:
+- 모든 필요한 테이블 생성
+- 인덱스 생성
+- RLS (Row Level Security) 정책 설정
+- 업데이트 트리거 함수
+- 초기 데이터 (기술 스택 등)
 
--- 프로젝트 테이블 생성
-CREATE TABLE IF NOT EXISTS projects (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  client_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  title VARCHAR(255) NOT NULL,
-  description TEXT NOT NULL,
-  budget DECIMAL(10,2),
-  currency VARCHAR(3) DEFAULT 'USD',
-  status VARCHAR(50) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'completed', 'cancelled')),
-  category VARCHAR(100),
-  skills_required TEXT[],
-  deadline DATE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- 인덱스 생성
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
-CREATE INDEX IF NOT EXISTS idx_projects_client_id ON projects(client_id);
-CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
-
--- RLS (Row Level Security) 활성화
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-
--- RLS 정책 생성
-CREATE POLICY "Users can view own data" ON users FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own data" ON users FOR UPDATE USING (auth.uid() = id);
-
-CREATE POLICY "Profiles are viewable by everyone" ON profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Projects are viewable by everyone" ON projects FOR SELECT USING (true);
-CREATE POLICY "Users can insert own projects" ON projects FOR INSERT WITH CHECK (auth.uid() = client_id);
-CREATE POLICY "Users can update own projects" ON projects FOR UPDATE USING (auth.uid() = client_id);
-CREATE POLICY "Users can delete own projects" ON projects FOR DELETE USING (auth.uid() = client_id);
-```
-
-### 2. 스키마 생성 후 확인
+### 4. 스키마 생성 후 확인
 
 스키마 생성이 완료되면 다음 명령어로 확인:
 
@@ -96,18 +36,24 @@ CREATE POLICY "Users can delete own projects" ON projects FOR DELETE USING (auth
 npm start
 ```
 
-### 3. Railway 배포 시 환경 변수 설정
+### 5. Railway 배포 시 환경 변수 설정
 
 Railway 대시보드에서 다음 환경 변수들을 설정하세요:
 
 ```bash
-SUPABASE_URL=https://xmeuypaqqtqcvkryygjo.supabase.co
+# Supabase 설정
+SUPABASE_URL=https://[YOUR-PROJECT-REF].supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-actual-service-role-key
-DATABASE_URL=postgresql://postgres:[PASSWORD]@db.xmeuypaqqtqcvkryygjo.supabase.co:5432/postgres
+SUPABASE_ANON_KEY=your-actual-anon-key
+
+# JWT 설정
 JWT_SECRET=your-super-secret-jwt-key-here
+JWT_EXPIRES_IN=7d
+
+# 서버 설정
 NODE_ENV=production
+PORT=3001
 FRONTEND_URL=https://your-frontend-domain.com
-SOCKET_CORS_ORIGIN=https://your-frontend-domain.com
 ```
 
 ## 완료 후 확인
@@ -116,3 +62,52 @@ SOCKET_CORS_ORIGIN=https://your-frontend-domain.com
 - ✅ 서버가 정상적으로 시작됨
 - ✅ `/api/health` 엔드포인트 응답
 - ✅ Supabase 데이터베이스 연결 성공
+- ✅ 모든 테이블이 생성됨
+- ✅ RLS 정책이 적용됨
+
+## 생성되는 테이블 목록
+
+### 핵심 테이블
+- `users` - 사용자 정보
+- `profiles` - 프로필 정보
+- `projects` - 프로젝트
+- `proposals` - 제안서
+- `contracts` - 계약
+- `messages` - 메시지
+- `notifications` - 알림
+
+### 지원 테이블
+- `tech_stacks` - 기술 스택
+- `portfolios` - 포트폴리오
+- `reviews` - 리뷰
+- `file_uploads` - 파일 업로드
+- `project_tech_stacks` - 프로젝트-기술스택 연결
+- `portfolio_tech_stacks` - 포트폴리오-기술스택 연결
+
+## RLS (Row Level Security) 정책
+
+모든 테이블에 대해 적절한 RLS 정책이 설정됩니다:
+- 사용자는 자신의 데이터만 조회/수정 가능
+- 공개 데이터는 모든 사용자가 조회 가능
+- 관리자 권한이 필요한 작업은 적절히 제한
+
+## 문제 해결
+
+### 스키마 생성 실패
+1. **확인사항**: Supabase 프로젝트가 활성화되어 있는지 확인
+2. **해결방법**: `essential-tables.sql`을 다시 실행
+
+### 권한 오류
+1. **확인사항**: `SUPABASE_SERVICE_ROLE_KEY`가 올바른지 확인
+2. **해결방법**: Supabase에서 서비스 역할 키 다시 복사
+
+### 테이블이 생성되지 않음
+1. **확인사항**: SQL 실행 시 오류가 발생했는지 확인
+2. **해결방법**: Supabase SQL Editor에서 오류 메시지 확인 후 수정
+
+## 다음 단계
+
+스키마 생성이 완료되면:
+1. **API 테스트**: `/api/health` 엔드포인트 확인
+2. **사용자 등록 테스트**: `/api/auth/register` 엔드포인트 테스트
+3. **프론트엔드 연결**: 프론트엔드에서 API 호출 테스트
