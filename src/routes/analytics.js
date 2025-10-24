@@ -423,6 +423,20 @@ async function getTrendsData(startDate, endDate) {
   };
 }
 
+// 기본 라우트 (라우트 등록 확인용)
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Analytics API is working',
+    endpoints: [
+      'POST /dashboard - Get dashboard analytics (auth required)',
+      'POST /partner-performance - Get partner performance (auth required)',
+      'POST /client-activity - Get client activity (auth required)',
+      'POST /trends - Get platform trends (auth required)'
+    ]
+  });
+});
+
 // 보호된 라우트
 router.post('/dashboard', authenticateToken, getDashboardAnalytics);
 router.post('/partner-performance', authenticateToken, getPartnerPerformance);

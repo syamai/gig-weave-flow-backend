@@ -584,6 +584,21 @@ const getContractReviews = asyncHandler(async (req, res) => {
   });
 });
 
+// 기본 라우트 (라우트 등록 확인용)
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Reviews API is working',
+    endpoints: [
+      'POST / - Create review (auth required)',
+      'PUT /:id - Update review (auth required)',
+      'DELETE /:id - Delete review (auth required)',
+      'GET /user/:userId - Get user reviews',
+      'GET /contract/:contractId - Get contract reviews'
+    ]
+  });
+});
+
 // 보호된 라우트
 router.post('/', authenticateToken, validate(reviewValidation.create), createReview);
 router.put('/:id', authenticateToken, validate(reviewValidation.update), updateReview);

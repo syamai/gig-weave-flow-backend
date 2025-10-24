@@ -213,6 +213,19 @@ const hasRole = asyncHandler(async (req, res) => {
   });
 });
 
+// 기본 라우트 (라우트 등록 확인용)
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'RPC API is working',
+    endpoints: [
+      'POST /create-notification - Create notification (auth required)',
+      'POST /get-user-role - Get user role (auth required)',
+      'POST /has-role - Check user role (auth required)'
+    ]
+  });
+});
+
 // 보호된 라우트
 router.post('/create-notification', authenticateToken, createNotification);
 router.post('/get-user-role', authenticateToken, getUserRole);
