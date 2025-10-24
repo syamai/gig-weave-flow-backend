@@ -42,9 +42,12 @@ app.use(helmet({
 const allowedOrigins = [
   'http://localhost:8080',
   'http://localhost:3000',
+  'http://localhost:3001',
   'https://gig-weave-flow-lfayfcu39-syamais-projects.vercel.app',
   'https://gig-weave-flow.vercel.app',
-  'https://*.vercel.app'
+  'https://*.vercel.app',
+  'https://*.netlify.app',
+  'https://*.github.io'
 ];
 
 app.use(cors({
@@ -64,6 +67,12 @@ app.use(cors({
     
     // 개발 환경에서는 모든 origin 허용
     if (config.nodeEnv === 'development') {
+      return callback(null, true);
+    }
+    
+    // Railway 환경에서도 더 관대하게 허용 (임시)
+    if (config.nodeEnv === 'production') {
+      console.log('Allowing origin:', origin);
       return callback(null, true);
     }
     
