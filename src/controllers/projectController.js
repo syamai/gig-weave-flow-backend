@@ -1,4 +1,4 @@
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 
 // 프로젝트 목록 조회
@@ -62,27 +62,73 @@ const getProjects = asyncHandler(async (req, res) => {
     };
   }
 
-  const [projects, total] = await Promise.all([
-    prisma.project.findMany({
-      where,
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        projectTechStacks: {
-          include: {
-            techStack: true
-          }
-        },
-        _count: {
-          select: {
-            proposals: true
-          }
-        }
-      }
-    }),
-    prisma.project.count({ where })
-  ]);
+  // Supabase 쿼리 구성
+  let query = supabase
+    .from('projects')
+    .select(`
+      *,
+      project_tech_stacks (
+        tech_stacks (
+          id,
+          name,
+          category
+        )
+      )
+    `)
+    .eq('status', status)
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
+  // 검색 조건 추가
+  if (search) {
+    query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+  }
+  if (projectType) {
+    query = query.eq('project_type', projectType);
+  }
+  if (budgetRange) {
+    const [min, max] = budgetRange.split('-').map(Number);
+    if (min) query = query.gte('budget_min', min);
+    if (max) query = query.lte('budget_max', max);
+  }
+  if (techStackIds) {
+    query = query.in('id', 
+      supabase
+        .from('project_tech_stacks')
+        .select('project_id')
+        .in('tech_stack_id', techStackArray)
+    );
+  }
+
+  const { data: projects, error: projectsError } = await query;
+
+  if (projectsError) {
+    throw projectsError;
+  }
+
+  // 총 개수 조회
+  let countQuery = supabase
+    .from('projects')
+    .select('id', { count: 'exact' })
+    .eq('status', status);
+
+  if (search) {
+    countQuery = countQuery.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+  }
+  if (projectType) {
+    countQuery = countQuery.eq('project_type', projectType);
+  }
+  if (budgetRange) {
+    const [min, max] = budgetRange.split('-').map(Number);
+    if (min) countQuery = countQuery.gte('budget_min', min);
+    if (max) countQuery = countQuery.lte('budget_max', max);
+  }
+
+  const { count: total, error: countError } = await countQuery;
+
+  if (countError) {
+    throw countError;
+  }
 
   res.json({
     success: true,
@@ -102,43 +148,42 @@ const getProjects = asyncHandler(async (req, res) => {
 const getProject = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      projectTechStacks: {
-        include: {
-          techStack: true
-        }
-      },
-      proposals: {
-        include: {
-          partnerProfile: {
-            include: {
-              partnerTechStacks: {
-                include: {
-                  techStack: true
-                }
-              }
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' }
-      },
-      contracts: {
-        include: {
-          partnerProfile: true
-        }
-      },
-      _count: {
-        select: {
-          proposals: true,
-          contracts: true
-        }
-      }
-    }
-  });
+  const { data: project, error } = await supabase
+    .from('projects')
+    .select(`
+      *,
+      project_tech_stacks (
+        tech_stacks (
+          id,
+          name,
+          category
+        )
+      ),
+      proposals (
+        *,
+        profiles!proposals_freelancer_id_fkey (
+          *,
+          users!profiles_user_id_fkey (
+            full_name,
+            email
+          )
+        )
+      ),
+      contracts (
+        *,
+        profiles!contracts_freelancer_id_fkey (
+          *,
+          users!profiles_user_id_fkey (
+            full_name,
+            email
+          )
+        )
+      )
+    `)
+    .eq('id', id)
+    .single();
 
-  if (!project) {
+  if (error || !project) {
     return res.status(404).json({
       success: false,
       message: 'Project not found'
