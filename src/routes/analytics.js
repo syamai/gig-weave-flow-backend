@@ -3,6 +3,9 @@ const { supabase } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/errorHandler');
 
+// 임시로 Prisma 사용 비활성화
+const prisma = null;
+
 const router = express.Router();
 
 /**
