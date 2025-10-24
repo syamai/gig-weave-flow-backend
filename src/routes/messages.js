@@ -245,14 +245,14 @@ const getConversations = asyncHandler(async (req, res) => {
 
   // 읽지 않은 메시지 수 계산
   for (const [otherUserId, conversation] of conversationMap) {
-    const unreadCount = await // prisma.message.count({
-      where: {
-        senderId: otherUserId,
-        receiverId: userId,
-        read: false
-      }
-    });
-    conversation.unreadCount = unreadCount;
+    const { count: unreadCount } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('sender_id', otherUserId)
+      .eq('receiver_id', userId)
+      .eq('read', false);
+    
+    conversation.unreadCount = unreadCount || 0;
   }
 
   const conversationList = Array.from(conversationMap.values());

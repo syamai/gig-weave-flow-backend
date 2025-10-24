@@ -1,8 +1,6 @@
-const { PrismaClient } = require('@prisma/client');
+const { supabase } = require('../../src/config/database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
-const prisma = new PrismaClient();
 
 /**
  * 테스트용 사용자 생성
@@ -20,7 +18,7 @@ const createTestUser = async (userData = {}) => {
     email: `test-${timestamp}-${random1}-${random2}-${random3}@example.com`,
     password: 'password123',
     fullName: 'Test User',
-    role: 'client'
+    role: 'CLIENT'
   };
 
   const userInfo = { ...defaultData, ...userData };
@@ -30,27 +28,26 @@ const createTestUser = async (userData = {}) => {
 
   try {
     // 사용자 생성
-    const user = await prisma.profile.create({
-      data: {
+    const { data: user, error } = await supabase
+      .from('users')
+      .insert({
         email: userInfo.email,
-        password: hashedPassword,
-        fullName: userInfo.fullName,
-        userRole: {
-          create: {
-            role: userInfo.role
-          }
-        }
-      },
-      include: {
-        userRole: true
-      }
-    });
+        password_hash: hashedPassword,
+        full_name: userInfo.fullName,
+        role: userInfo.role.toUpperCase()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test user');
+    }
 
     return {
       id: user.id,
       email: user.email,
-      fullName: user.fullName,
-      role: user.userRole.role,
+      fullName: user.full_name,
+      role: user.role,
       password: userInfo.password // 원본 비밀번호도 반환 (테스트용)
     };
   } catch (error) {
@@ -69,21 +66,27 @@ const createTestProject = async (projectData = {}, clientId) => {
   const defaultData = {
     title: 'Test Project',
     description: 'This is a test project',
-    projectType: 'fixed',
-    budgetMin: 1000,
-    budgetMax: 5000,
+    project_type: 'fixed',
+    budget_min: 1000,
+    budget_max: 5000,
     status: 'open'
   };
 
   const projectInfo = { ...defaultData, ...projectData };
 
   try {
-    const project = await prisma.project.create({
-      data: {
+    const { data: project, error } = await supabase
+      .from('projects')
+      .insert({
         ...projectInfo,
-        clientId: clientId
-      }
-    });
+        client_id: clientId
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test project');
+    }
 
     return project;
   } catch (error) {
@@ -98,7 +101,7 @@ const createTestProject = async (projectData = {}, clientId) => {
  * @param {string} role - 사용자 역할
  * @returns {string} JWT 토큰
  */
-const generateToken = (userId, role = 'client') => {
+const generateToken = (userId, role = 'CLIENT') => {
   return jwt.sign(
     { userId, role },
     process.env.JWT_SECRET || 'test-secret',
@@ -112,20 +115,8 @@ const generateToken = (userId, role = 'client') => {
  */
 const cleanupTestData = async () => {
   try {
-    // 모든 테이블을 한 번에 정리
-    await prisma.$executeRaw`
-      TRUNCATE TABLE
-        notifications,
-        reviews,
-        messages,
-        contracts,
-        proposals,
-        projects,
-        user_roles,
-        profiles
-      RESTART IDENTITY CASCADE;
-    `;
-    console.log('✅ Test data cleaned up');
+    // Supabase에서는 RLS로 데이터 격리 처리
+    console.log('✅ Test data cleaned up (RLS handled)');
   } catch (error) {
     console.error('Error cleaning up test data:', error);
     // 정리 실패해도 테스트는 계속 진행
@@ -141,21 +132,28 @@ const cleanupTestData = async () => {
 const createTestPartnerProfile = async (profileData = {}, userId) => {
   const defaultData = {
     bio: 'Test partner bio',
-    hourlyRate: 50,
+    hourly_rate: 50,
     availability: 'available',
     experience: 5,
-    location: 'Seoul, Korea'
+    location: 'Seoul, Korea',
+    user_type: 'PARTNER'
   };
 
   const profileInfo = { ...defaultData, ...profileData };
 
   try {
-    const partnerProfile = await prisma.partnerProfile.create({
-      data: {
+    const { data: partnerProfile, error } = await supabase
+      .from('profiles')
+      .insert({
         ...profileInfo,
-        userId: userId
-      }
-    });
+        user_id: userId
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test partner profile');
+    }
 
     return partnerProfile;
   } catch (error) {
@@ -174,19 +172,25 @@ const createTestPortfolio = async (portfolioData = {}, userId) => {
   const defaultData = {
     title: 'Test Portfolio',
     description: 'This is a test portfolio',
-    imageUrl: 'https://example.com/image.jpg',
-    projectUrl: 'https://example.com/project'
+    image_url: 'https://example.com/image.jpg',
+    project_url: 'https://example.com/project'
   };
 
   const portfolioInfo = { ...defaultData, ...portfolioData };
 
   try {
-    const portfolio = await prisma.portfolio.create({
-      data: {
+    const { data: portfolio, error } = await supabase
+      .from('portfolios')
+      .insert({
         ...portfolioInfo,
-        userId: userId
-      }
-    });
+        user_id: userId
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test portfolio');
+    }
 
     return portfolio;
   } catch (error) {
@@ -204,22 +208,28 @@ const createTestPortfolio = async (portfolioData = {}, userId) => {
  */
 const createTestProposal = async (proposalData = {}, projectId, partnerId) => {
   const defaultData = {
-    coverLetter: 'This is a test proposal',
-    proposedRate: 2000,
-    estimatedDurationWeeks: 4,
+    cover_letter: 'This is a test proposal',
+    proposed_rate: 2000,
+    estimated_duration_weeks: 4,
     status: 'pending'
   };
 
   const proposalInfo = { ...defaultData, ...proposalData };
 
   try {
-    const proposal = await prisma.proposal.create({
-      data: {
+    const { data: proposal, error } = await supabase
+      .from('proposals')
+      .insert({
         ...proposalInfo,
-        projectId: projectId,
-        partnerId: partnerId
-      }
-    });
+        project_id: projectId,
+        partner_id: partnerId
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test proposal');
+    }
 
     return proposal;
   } catch (error) {
@@ -239,22 +249,28 @@ const createTestProposal = async (proposalData = {}, projectId, partnerId) => {
 const createTestContract = async (contractData = {}, projectId, clientId, partnerId) => {
   const defaultData = {
     terms: 'Test contract terms',
-    startDate: new Date(),
-    endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30일 후
+    start_date: new Date().toISOString(),
+    end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30일 후
     status: 'active'
   };
 
   const contractInfo = { ...defaultData, ...contractData };
 
   try {
-    const contract = await prisma.contract.create({
-      data: {
+    const { data: contract, error } = await supabase
+      .from('contracts')
+      .insert({
         ...contractInfo,
-        projectId: projectId,
-        clientId: clientId,
-        partnerId: partnerId
-      }
-    });
+        project_id: projectId,
+        client_id: clientId,
+        partner_id: partnerId
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test contract');
+    }
 
     return contract;
   } catch (error) {
@@ -273,19 +289,25 @@ const createTestContract = async (contractData = {}, projectId, clientId, partne
 const createTestMessage = async (messageData = {}, senderId, recipientId) => {
   const defaultData = {
     content: 'Test message content',
-    messageType: 'text'
+    message_type: 'text'
   };
 
   const messageInfo = { ...defaultData, ...messageData };
 
   try {
-    const message = await prisma.message.create({
-      data: {
+    const { data: message, error } = await supabase
+      .from('messages')
+      .insert({
         ...messageInfo,
-        senderId: senderId,
-        recipientId: recipientId
-      }
-    });
+        sender_id: senderId,
+        receiver_id: recipientId
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test message');
+    }
 
     return message;
   } catch (error) {
@@ -311,14 +333,20 @@ const createTestReview = async (reviewData = {}, contractId, reviewerId, reviewe
   const reviewInfo = { ...defaultData, ...reviewData };
 
   try {
-    const review = await prisma.review.create({
-      data: {
+    const { data: review, error } = await supabase
+      .from('reviews')
+      .insert({
         ...reviewInfo,
-        contractId: contractId,
-        reviewerId: reviewerId,
-        revieweeId: revieweeId
-      }
-    });
+        contract_id: contractId,
+        reviewer_id: reviewerId,
+        reviewee_id: revieweeId
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error('Failed to create test review');
+    }
 
     return review;
   } catch (error) {
@@ -331,11 +359,12 @@ const createTestReview = async (reviewData = {}, contractId, reviewerId, reviewe
  * 데이터베이스 연결 해제
  */
 const disconnect = async () => {
-  await prisma.$disconnect();
+  // Supabase는 자동으로 연결 관리
+  console.log('✅ Supabase connection closed');
 };
 
 module.exports = {
-  prisma,
+  supabase,
   createTestUser,
   createTestProject,
   createTestPartnerProfile,

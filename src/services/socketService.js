@@ -1,4 +1,4 @@
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const { createNotification } = require('./notificationService');
 
 /**
@@ -46,7 +46,7 @@ class SocketService {
           }
 
           // 메시지 저장
-          const message = await // prisma.message.create({
+          const message = await supabasemessage.create({
             data: {
               senderId,
               receiverId,
@@ -101,7 +101,7 @@ class SocketService {
             return;
           }
 
-          await // prisma.message.update({
+          await supabasemessage.update({
             where: { id: messageId },
             data: { read: true }
           });
@@ -178,7 +178,7 @@ class SocketService {
   // 프로젝트 생성 알림
   async notifyProjectCreated(projectId, clientId) {
     try {
-      const project = await // prisma.project.findUnique({
+      const project = await supabaseproject.findUnique({
         where: { id: projectId },
         include: {
           projectTechStacks: {
@@ -192,7 +192,7 @@ class SocketService {
       if (!project) return;
 
       // 모든 파트너에게 알림
-      const partners = await // prisma.partnerProfile.findMany({
+      const partners = await supabasepartnerProfile.findMany({
         where: { available: true },
         include: { profile: true }
       });
@@ -222,7 +222,7 @@ class SocketService {
   // 제안서 제출 알림
   async notifyProposalSubmitted(proposalId, clientId) {
     try {
-      const proposal = await // prisma.proposal.findUnique({
+      const proposal = await supabaseproposal.findUnique({
         where: { id: proposalId },
         include: {
           project: true,
@@ -257,7 +257,7 @@ class SocketService {
   // 계약 생성 알림
   async notifyContractCreated(contractId, partnerId) {
     try {
-      const contract = await // prisma.contract.findUnique({
+      const contract = await supabasecontract.findUnique({
         where: { id: contractId },
         include: {
           project: true
