@@ -39,8 +39,36 @@ app.use(helmet({
 }));
 
 // CORS 설정
+const allowedOrigins = [
+  'http://localhost:8080',
+  'http://localhost:3000',
+  'https://gig-weave-flow-lfayfcu39-syamais-projects.vercel.app',
+  'https://gig-weave-flow.vercel.app',
+  'https://*.vercel.app'
+];
+
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: function (origin, callback) {
+    // origin이 undefined인 경우 (같은 도메인에서의 요청) 허용
+    if (!origin) return callback(null, true);
+    
+    // 허용된 origin 목록에 있는지 확인
+    if (allowedOrigins.some(allowedOrigin => {
+      if (allowedOrigin.includes('*')) {
+        return origin.endsWith(allowedOrigin.replace('*', ''));
+      }
+      return origin === allowedOrigin;
+    })) {
+      return callback(null, true);
+    }
+    
+    // 개발 환경에서는 모든 origin 허용
+    if (config.nodeEnv === 'development') {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
