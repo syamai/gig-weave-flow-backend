@@ -1,5 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
-const { PrismaClient } = require('../generated/prisma');
+const { PrismaClient } = require('@prisma/client');
 const config = require('./index');
 
 // 환경 변수 검증
