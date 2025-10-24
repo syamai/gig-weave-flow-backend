@@ -214,19 +214,13 @@ const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   // 사용자 찾기
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      passwordHash: true,
-      role: true,
-      createdAt: true
-    }
-  });
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, full_name, password_hash, role, created_at')
+    .eq('email', email)
+    .single();
 
-  if (!user || !user.passwordHash) {
+  if (error || !user || !user.password_hash) {
     return res.status(401).json({
       success: false,
       message: 'Invalid credentials'
@@ -234,7 +228,7 @@ const login = asyncHandler(async (req, res) => {
   }
 
   // 비밀번호 확인
-  const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+  const isPasswordValid = await bcrypt.compare(password, user.password_hash);
   if (!isPasswordValid) {
     return res.status(401).json({
       success: false,
@@ -249,14 +243,17 @@ const login = asyncHandler(async (req, res) => {
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   );
 
-  // 비밀번호 제거
-  delete user.password;
-
   res.json({
     success: true,
     message: 'Login successful',
     data: {
-      user,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.full_name,
+        role: user.role,
+        createdAt: user.created_at
+      },
       token
     }
   });
