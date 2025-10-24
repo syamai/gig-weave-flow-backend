@@ -50,13 +50,27 @@ const getTechStacks = asyncHandler(async (req, res) => {
     where.category = category;
   }
 
-  const techStacks = await prisma.techStack.findMany({
-    where,
-    orderBy: [
-      { category: 'asc' },
-      { name: 'asc' }
-    ]
-  });
+  let query = supabase
+    .from('tech_stacks')
+    .select('*')
+    .order('category', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (category) {
+    query = query.eq('category', category);
+  }
+
+  const { data: techStacks, error } = await query;
+
+  if (error) {
+    // tech_stacks 테이블이 없을 수 있으므로 빈 배열 반환
+    return res.json({
+      success: true,
+      data: { 
+        techStacks: {}
+      }
+    });
+  }
 
   // 카테고리별로 그룹화
   const groupedTechStacks = techStacks.reduce((acc, techStack) => {
@@ -102,16 +116,22 @@ const getTechStacks = asyncHandler(async (req, res) => {
  *                           description: 카테고리 목록
  */
 const getCategories = asyncHandler(async (req, res) => {
-  const categories = await prisma.techStack.findMany({
-    select: { category: true },
-    distinct: ['category'],
-    orderBy: { category: 'asc' }
-  });
+  const { data: categories, error } = await supabase
+    .from('tech_stacks')
+    .select('category')
+    .order('category', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  // 중복 제거
+  const uniqueCategories = [...new Set(categories.map(item => item.category))];
 
   res.json({
     success: true,
     data: { 
-      categories: categories.map(c => c.category)
+      categories: uniqueCategories
     }
   });
 });
