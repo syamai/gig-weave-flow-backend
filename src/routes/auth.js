@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { prisma } = require('../config/database');
+const { supabase } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { validate, authValidation } = require('../middleware/validation');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -70,9 +70,11 @@ const register = asyncHandler(async (req, res) => {
   const { email, password, fullName, role } = req.body;
 
   // 이메일 중복 확인
-  const existingUser = await prisma.user.findUnique({
-    where: { email }
-  });
+  const { data: existingUser, error: checkError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .single();
 
   if (existingUser) {
     return res.status(400).json({
@@ -85,21 +87,20 @@ const register = asyncHandler(async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 12);
 
   // 사용자 생성
-  const user = await prisma.user.create({
-    data: {
+  const { data: user, error: createError } = await supabase
+    .from('users')
+    .insert({
       email,
-      fullName,
-      passwordHash: hashedPassword,
+      full_name: fullName,
+      password_hash: hashedPassword,
       role: role.toUpperCase()
-    },
-    select: {
-      id: true,
-      email: true,
-      fullName: true,
-      role: true,
-      createdAt: true
-    }
-  });
+    })
+    .select('id, email, full_name, role, created_at')
+    .single();
+
+  if (createError) {
+    throw createError;
+  }
 
   // JWT 토큰 생성
   const token = jwt.sign(
@@ -112,7 +113,13 @@ const register = asyncHandler(async (req, res) => {
     success: true,
     message: 'User registered successfully',
     data: {
-      user,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.full_name,
+        role: user.role,
+        createdAt: user.created_at
+      },
       token
     }
   });
