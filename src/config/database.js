@@ -1,5 +1,4 @@
 const { createClient } = require('@supabase/supabase-js');
-const { PrismaClient } = require('@prisma/client');
 const config = require('./index');
 
 // 환경 변수 검증
@@ -14,9 +13,6 @@ if (!supabaseKey) {
 
 // Supabase 클라이언트 생성
 const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Prisma 클라이언트 생성
-const prisma = new PrismaClient();
 
 // Database connection test
 const connectDB = async () => {
@@ -52,7 +48,6 @@ const disconnectDB = async () => {
 
 module.exports = {
   supabase,
-  prisma,
   connectDB,
   disconnectDB
 };
