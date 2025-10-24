@@ -264,57 +264,70 @@ const updateProject = asyncHandler(async (req, res) => {
   const updateData = req.body;
 
   // 프로젝트 소유자 확인
-  const existingProject = await prisma.project.findUnique({
-    where: { id },
-    select: { clientId: true }
-  });
+  const { data: existingProject, error: projectError } = await supabase
+    .from('projects')
+    .select('client_id')
+    .eq('id', id)
+    .single();
 
-  if (!existingProject) {
+  if (projectError || !existingProject) {
     return res.status(404).json({
       success: false,
       message: 'Project not found'
     });
   }
 
-  if (existingProject.clientId !== req.user.id) {
+  if (existingProject.client_id !== req.user.id) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to update this project'
     });
   }
 
-  const project = await prisma.$transaction(async (tx) => {
-    // 프로젝트 업데이트
-    const updatedProject = await tx.project.update({
-      where: { id },
-      data: {
-        ...updateData,
-        budgetMin: updateData.budgetMin ? parseFloat(updateData.budgetMin) : undefined,
-        budgetMax: updateData.budgetMax ? parseFloat(updateData.budgetMax) : undefined,
-        durationWeeks: updateData.durationWeeks ? parseInt(updateData.durationWeeks) : undefined
-      }
+  // 프로젝트 업데이트
+  const updateFields = {
+    ...updateData,
+    budget_min: updateData.budgetMin ? parseFloat(updateData.budgetMin) : undefined,
+    budget_max: updateData.budgetMax ? parseFloat(updateData.budgetMax) : undefined,
+    duration_weeks: updateData.durationWeeks ? parseInt(updateData.durationWeeks) : undefined
+  };
+
+  const { data: updatedProject, error: updateError } = await supabase
+    .from('projects')
+    .update(updateFields)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (updateError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update project'
     });
+  }
 
-    // 기술 스택 업데이트
-    if (updateData.techStackIds) {
-      // 기존 기술 스택 삭제
-      await tx.projectTechStack.deleteMany({
-        where: { projectId: id }
-      });
+  // 기술 스택 업데이트
+  if (updateData.techStackIds) {
+    // 기존 기술 스택 삭제
+    await supabase
+      .from('project_tech_stacks')
+      .delete()
+      .eq('project_id', id);
 
-      // 새 기술 스택 추가
-      if (updateData.techStackIds.length > 0) {
-        await tx.projectTechStack.createMany({
-          data: updateData.techStackIds.map(techStackId => ({
-            projectId: id,
-            techStackId
-          }))
-        });
-      }
+    // 새 기술 스택 추가
+    if (updateData.techStackIds.length > 0) {
+      const techStackData = updateData.techStackIds.map(techStackId => ({
+        project_id: id,
+        tech_stack_id: techStackId
+      }));
+
+      await supabase
+        .from('project_tech_stacks')
+        .insert(techStackData);
     }
+  }
 
-    return updatedProject;
-  });
+  const project = updatedProject;
 
   res.json({
     success: true,
@@ -328,19 +341,20 @@ const deleteProject = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
   // 프로젝트 소유자 확인
-  const existingProject = await prisma.project.findUnique({
-    where: { id },
-    select: { clientId: true, status: true }
-  });
+  const { data: existingProject, error: projectError } = await supabase
+    .from('projects')
+    .select('client_id, status')
+    .eq('id', id)
+    .single();
 
-  if (!existingProject) {
+  if (projectError || !existingProject) {
     return res.status(404).json({
       success: false,
       message: 'Project not found'
     });
   }
 
-  if (existingProject.clientId !== req.user.id) {
+  if (existingProject.client_id !== req.user.id) {
     return res.status(403).json({
       success: false,
       message: 'Not authorized to delete this project'
@@ -355,9 +369,17 @@ const deleteProject = asyncHandler(async (req, res) => {
     });
   }
 
-  await prisma.project.delete({
-    where: { id }
-  });
+  const { error: deleteError } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', id);
+
+  if (deleteError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete project'
+    });
+  }
 
   res.json({
     success: true,
@@ -377,33 +399,30 @@ const getMyProjects = asyncHandler(async (req, res) => {
   const take = parseInt(limit);
   const clientId = req.user.id;
 
-  const where = { clientId };
+  let query = supabase
+    .from('projects')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false })
+    .range(skip, skip + take - 1);
+
   if (status) {
-    where.status = status;
+    query = query.eq('status', status);
   }
 
-  const [projects, total] = await Promise.all([
-    prisma.project.findMany({
-      where,
-      skip,
-      take,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        projectTechStacks: {
-          include: {
-            techStack: true
-          }
-        },
-        _count: {
-          select: {
-            proposals: true,
-            contracts: true
-          }
-        }
-      }
-    }),
-    prisma.project.count({ where })
-  ]);
+  const { data: projects, error: projectsError } = await query;
+
+  const { count: total, error: countError } = await supabase
+    .from('projects')
+    .select('*', { count: 'exact', head: true })
+    .eq('client_id', clientId);
+
+  if (projectsError || countError) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch projects'
+    });
+  }
 
   res.json({
     success: true,
